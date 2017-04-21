@@ -79,20 +79,28 @@ class Judge:
 
 		self._status	= Judge.STATUS_READY					# 현재 상태
 
-		self._solverP1	= None									# 각 플레이어에 해당하는 Solver객체
-		self._solverP2	= None
+		self._solverP1	= []									# 각 플레이어에 해당하는 Solver객체(리스트)
+		self._solverP2	= []
 		self._output	= None									# 결과 출력용 객체
 		
 		self._interface	= Judge.Interface(self)					# solver에게 전달하기 위한 인터페이스 객체
 
 
-	# 플레이어1에 해당하는 solver 지정
+	# 플레이어1에 해당하는 solver 지정. solver리스트는 초기화하고 이 solver가 인덱스 0이 된다.
 	def setPlayer1Solver(self, solver):
-		self._solverP1	= solver
+		self._solverP1	= [solver]
 
-	# 플레이어2에 해당하는 solver 지정
+	# 플레이어1에 해당하는 solver 추가 (인덱스로 구분한다)
+	def addPlayer1Solver(self, solver):
+		self._solverP1.append(solver)
+
+	# 플레이어2에 해당하는 solver 지정. solver리스트는 초기화하고 이 solver가 인덱스 0이 된다.
 	def setPlayer2Solver(self, solver):
-		self._solverP2	= solver
+		self._solverP2	= [solver]
+
+	# 플레이어2에 해당하는 solver 추가 (인덱스로 구분한다)
+	def addPlayer2Solver(self, solver):
+		self._solverP2.append(solver)
 
 	# 아웃풋 객체 지정
 	def setJudgeOutput(self, output):
@@ -193,7 +201,8 @@ class Judge:
 		self.moveList.append(newMove)								# 수 리스트에 추가
 
 	# 플레이어 순서에 맞는 Solver를 호출해서 수를 두고 보드 상태를 리턴한다.
-	def doNextMove(self):
+	# solverIndex : solver를 1개 이상 등록한 경우 어떤 solver를 사용할지 인덱스 지정
+	def doNextMove(self, solverIndex = 0):
 		if self._status	== Judge.STATUS_READY:						# 준비 상태에 있었다면 플레이 상태로 전환
 			self._status = Judge.STATUS_PLAYING
 
@@ -202,7 +211,7 @@ class Judge:
 			return self._status
 
 		p1TurnNow		= self.nextTurnIsP1()		  				# 이번에 두는 플레이어가 P1인지 (false면 P2)
-		nextSolver		= self._solverP1 if p1TurnNow else self._solverP2
+		nextSolver		= self._solverP1[solverIndex] if p1TurnNow else self._solverP2[solverIndex]
 
 		if self._output is not None:
 			self._output.showTurnStart(self._interface, nextSolver.name)	# (output) 턴 시작 표시
@@ -229,7 +238,7 @@ class Judge:
 		return self._status											# 상태값 리턴하고 끝
 
 
-	# 게임 끝날 때까지 계속 진행
+	# 게임 끝날 때까지 계속 진행. Solver 인덱스는 0을 사용한다. (제일 처음 추가한 solver)
 	def runUntilFinish(self):
 		if self._status	== Judge.STATUS_READY:						# 준비 상태에 있었다면 플레이 상태로 전환
 			self._status = Judge.STATUS_PLAYING

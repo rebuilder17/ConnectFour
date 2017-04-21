@@ -57,7 +57,6 @@ build/
 *_i.c
 *_p.c
 *.ilk
-*.meta
 *.obj
 *.pch
 *.pdb
@@ -188,7 +187,7 @@ $RECYCLE.BIN/
 ## Python
 #############
 
-*.py[cod]
+ConnectFourAI/**/*.py[cod]
 
 # Packages
 *.egg
