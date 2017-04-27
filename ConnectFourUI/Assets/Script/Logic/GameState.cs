@@ -158,7 +158,7 @@ public class GameState
 	/// <summary>
 	/// 상태 변경되었을 때 호출하는 이벤트
 	/// </summary>
-	public event System.Action<Status>			statusChanged;
+	public event System.Action<Status>			statusReport;
 
 
 	/// <summary>
@@ -242,8 +242,8 @@ public class GameState
 	{
 		this.status		= status;
 
-		if (statusChanged != null)											// 이벤트 호출
-			statusChanged(status);
+		if (statusReport != null)											// 이벤트 호출
+			statusReport(status);
 	}
 
 	/// <summary>

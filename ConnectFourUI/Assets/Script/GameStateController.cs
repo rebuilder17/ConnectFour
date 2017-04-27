@@ -159,6 +159,11 @@ public class GameStateController : MonoBehaviour
 					var code	= int.Parse(msg.Split(':')[1]);
 					switch (code)											// result code에 따라 gamestate세팅
 					{
+						case 1:
+							// 게임 진행중일 때에도 스테이트는 보내줘야한다.
+							m_gameState.SetStatus(GameState.Status.Playing);
+							break;
+
 						case 2:
 							m_gameState.SetStatus(GameState.Status.Draw);
 							m_state = State.GameOver;
@@ -308,5 +313,11 @@ public class GameStateController : MonoBehaviour
 				Debug.LogError(msgout);
 			}
 		}
+	}
+
+	private void OnApplicationQuit()
+	{
+		if (m_connection != null)
+			m_connection.Kill();								// 종료될 때는 외부 프로세스도 죽이기
 	}
 }

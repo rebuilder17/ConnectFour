@@ -5,6 +5,9 @@ public class ControlTest : MonoBehaviour
 {
 	[SerializeField]
 	GameStateController	m_controller;
+	[SerializeField]
+	BoardUI				m_boardUI;
+
 
 	GameState m_gameState;
 	string m_msgToSend	= "";
@@ -14,6 +17,13 @@ public class ControlTest : MonoBehaviour
 	{
 		m_gameState	= new GameState();
 		m_controller.MakeNewConnection(m_gameState);
+
+		m_boardUI.Clear();
+
+		m_gameState.newMovePlaced += (snapshot) =>
+		{
+			m_boardUI.ShowNewMove(snapshot.lastMove);
+		};
 	}
 
 	// Update is called once per frame
