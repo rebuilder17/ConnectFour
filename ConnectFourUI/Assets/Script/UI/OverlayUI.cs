@@ -8,6 +8,9 @@ public class OverlayUI : FSNBaseOverlayUI
 	[SerializeField]
 	BoardUI			m_boardUI;
 
+	[SerializeField]
+	PlayingInfoPanel	m_playingInfoPanel;
+
 
 
 	// Members
@@ -25,5 +28,20 @@ public class OverlayUI : FSNBaseOverlayUI
 		base.Initialize();
 
 		instance	= this;
+
+		HideInfoPanels();
+	}
+	//
+
+	public void HideInfoPanels()
+	{
+		m_playingInfoPanel.gameObject.SetActive(false);
+	}
+
+	public void ShowPlayingInfo(GameState curstate)
+	{
+		m_playingInfoPanel.gameObject.SetActive(true);
+
+		m_playingInfoPanel.ShowInfo(curstate);
 	}
 }

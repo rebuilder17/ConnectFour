@@ -60,7 +60,8 @@ public class Engine : MonoBehaviour
 		// TEST
 		m_player1Type	= PlayerType.Human;
 		m_player2Type	= PlayerType.Human;
-		
+		//m_player2Type	= PlayerType.AI;
+
 
 		// 게임 초기화
 
@@ -80,6 +81,8 @@ public class Engine : MonoBehaviour
 	void StartTurn()
 	{
 		m_state				= State.Playing;			// 상태 세팅
+
+		OverlayUI.instance.ShowPlayingInfo(m_gameState);	// 현재 턴 정보 UI에 표시
 		
 		var nextPlayer		= m_gameState.nextPlayer;
 		var nextPlayType	= nextPlayer == GameState.PlayerTurn.One? m_player1Type : m_player2Type;
@@ -88,6 +91,10 @@ public class Engine : MonoBehaviour
 		{
 			case PlayerType.Human:						// 사람이 착수해야 하는 경우, 입력 UI 표시
 				SetForHumanInput();
+				break;
+
+			case PlayerType.AI:							// AI가 착수해야 하는 경우, 바로 Search 솔버 선택하기
+				SetForSearchSolving();
 				break;
 		}
 	}
@@ -109,6 +116,25 @@ public class Engine : MonoBehaviour
 
 		var ui				= OverlayUI.instance;
 		ui.boardUI.ShowInputs(m_gameState.lastBoardSnapshot, OnMoveInput);	// 입력 UI 표시
+	}
+
+	/// <summary>
+	/// AI 처리 (Search) 상태로 세팅
+	/// </summary>
+	void SetForSearchSolving()
+	{
+		StartCoroutine(co_setForSolverWaiting(c_solverIndex_Search));
+	}
+
+	IEnumerator co_setForSolverWaiting(int solverIndex)
+	{
+		if (!m_gameStateCtrl.waitingForInput)					// 입력 기다리는 상태가 될 때까지 대기한다
+			yield return null;
+
+		m_state = State.Solving;								// 솔버 응답 기다리는 상태로
+
+		m_gameStateCtrl.InputSolverIndex(solverIndex);
+		OverlayUI.instance.OpenDialog<WaitingDialog>();
 	}
 
 	/// <summary>
@@ -144,7 +170,19 @@ public class Engine : MonoBehaviour
 	/// <param name="snapshot"></param>
 	void OnNewMove(GameState.IBoardSnapshot snapshot)
 	{
-		OverlayUI.instance.boardUI.ShowNewMove(snapshot.lastMove);
+		var ui		= OverlayUI.instance;
+		ui.GetDialog<WaitingDialog>().SafeClose();			// 착수 대기 다이얼로그가 열려있다면 닫기
+		ui.boardUI.ShowNewMove(snapshot.lastMove);			// 게임판 UI에 새 착수 보내기
+	}
+
+	/// <summary>
+	/// 게임 오버 다이얼로그 확인한 후
+	/// </summary>
+	void OnAfterResultDialog()
+	{
+		m_state = State.GameOver;
+		
+		// TODO : 착수 리스트 보여주기
 	}
 
 	/// <summary>
@@ -153,11 +191,37 @@ public class Engine : MonoBehaviour
 	/// <param name="gstatus"></param>
 	void OnGameStatusReport(GameState.Status gstatus)
 	{
-		Debug.LogFormat("status report : {0}", gstatus);
+		//Debug.LogFormat("status report : {0}", gstatus);
+
+		var ui		= OverlayUI.instance;
+		
 		switch(gstatus)
 		{
 			case GameState.Status.Playing:			// 계속 진행
 				StartTurn();						// 다음 턴 시작
+				break;
+
+			case GameState.Status.Win:				// 누군가 이겼을 때
+				{
+					var result	= m_gameState.lastPlayer == GameState.PlayerTurn.One?
+																ResultDialog.Result.Player1Win : ResultDialog.Result.Player2Win;
+					ui.GetDialog<ResultDialog>().Setup(result, OnAfterResultDialog);
+					ui.OpenDialog<ResultDialog>();
+				}
+				break;
+
+			case GameState.Status.Error:			// 착수 에러
+				{
+					var result	= m_gameState.lastPlayer == GameState.PlayerTurn.One?
+																ResultDialog.Result.Player1Error : ResultDialog.Result.Player2Error;
+					ui.GetDialog<ResultDialog>().Setup(result, OnAfterResultDialog);
+					ui.OpenDialog<ResultDialog>();
+				}
+				break;
+
+			case GameState.Status.Draw:				// 무승부
+				ui.GetDialog<ResultDialog>().Setup(ResultDialog.Result.Draw, OnAfterResultDialog);
+				ui.OpenDialog<ResultDialog>();
 				break;
 		}
 	}

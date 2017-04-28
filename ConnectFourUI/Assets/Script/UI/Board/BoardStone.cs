@@ -20,6 +20,11 @@ public class BoardStone : MonoBehaviour
 		{ ColorPreset.Player2, new Color(0.2f, 0.2f, 0.2f) },
 	};
 
+	public static Color GetColorFromPreset(ColorPreset preset)
+	{
+		return c_colorDict[preset];
+	}
+
 
 	// Properties
 

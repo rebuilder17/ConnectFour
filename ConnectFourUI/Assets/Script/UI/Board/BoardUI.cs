@@ -21,6 +21,15 @@ public class BoardUI : MonoBehaviour
 	[SerializeField]
 	Button []		m_buttons;
 
+	[SerializeField]
+	GameObject		m_statusPanel;
+	[SerializeField]
+	Image			m_statusStone;
+	[SerializeField]
+	Text			m_statusPosition;
+	[SerializeField]
+	Text			m_statusComment;
+
 
 	// Members
 
@@ -62,6 +71,8 @@ public class BoardUI : MonoBehaviour
 		}
 
 		DisableInputs();									// 초기에는 입력 감춘 상태로
+
+		HideStatus();										// 초기에는 상태 표시를 감춘다.
 	}
 
 	/// <summary>
@@ -74,6 +85,8 @@ public class BoardUI : MonoBehaviour
 		{
 			m_stoneObjs[i].Hide();
 		}
+
+		HideStatus();
 	}
 
 	/// <summary>
@@ -101,6 +114,16 @@ public class BoardUI : MonoBehaviour
 				}
 			}
 		}
+
+		var lastMove	= boardSnapshot.lastMove;
+		if (lastMove != null)
+		{
+			ShowStatus(lastMove);				// 상태 표시하기
+		}
+		else
+		{
+			HideStatus();
+		}
 	}
 
 	/// <summary>
@@ -113,11 +136,29 @@ public class BoardUI : MonoBehaviour
 															BoardStone.ColorPreset.Player1
 														:	BoardStone.ColorPreset.Player2;
 		GetStoneAtPos(newMove.x, newMove.y).Show(colorPreset, true);
+
+		ShowStatus(newMove);				// 상태 표시하기
 	}
 
 	BoardStone GetStoneAtPos(int x, int y)
 	{
 		return m_stoneObjs[y * m_boardWidth + x];
+	}
+
+
+	void HideStatus()
+	{
+		m_statusPanel.SetActive(false);
+	}
+
+	void ShowStatus(GameState.IMove move)
+	{
+		m_statusPanel.SetActive(true);
+
+		var player				= move.who == GameState.PlayerTurn.One? BoardStone.ColorPreset.Player1 : BoardStone.ColorPreset.Player2;
+		m_statusStone.color		= BoardStone.GetColorFromPreset(player);
+		m_statusPosition.text	= string.Format("({0},{1})", move.x + 1, move.y + 1);
+		m_statusComment.text	= move.comment;
 	}
 
 
