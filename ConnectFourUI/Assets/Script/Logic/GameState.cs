@@ -47,6 +47,7 @@ public class GameState
 	{
 		int			x			{ get; }
 		int			y			{ get; }
+		int			turn		{ get; }
 		PlayerTurn	who			{ get; }
 		string		comment		{ get; }
 	}
@@ -60,16 +61,18 @@ public class GameState
 		{
 			public int x		{ get; private set; }
 			public int y		{ get; private set; }
+			public int turn		{ get; private set; }
 
 			public PlayerTurn who	{ get; private set; }
 
 			public string comment { get; private set; }
 
 
-			public Move(int x, int y, PlayerTurn who, string comment = null)
+			public Move(int x, int y, int turn, PlayerTurn who, string comment = null)
 			{
 				this.x			= x;
 				this.y			= y;
+				this.turn		= turn;
 				this.who		= who;
 				this.comment	= comment;
 			}
@@ -115,7 +118,7 @@ public class GameState
 			if (x < 0 || x >= c_boardWidth || y < 0 || y >= c_boardHeight)
 				throw new System.InvalidOperationException("coordinate is out of range");
 
-			return y * c_boardHeight + x;
+			return y * c_boardWidth + x;
 		}
 
 		/// <summary>
@@ -225,7 +228,7 @@ public class GameState
 	public void PlaceNewMove(int x, int y, string comment = null)
 	{
 		var newBoard	= new Board(lastBoardSnapshot as Board);			// 보드 상태 복제하기
-		var newMove		= new Board.Move(x, y, nextPlayer, comment);
+		var newMove		= new Board.Move(x, y, turnCount, nextPlayer, comment);
 		newBoard.PlaceMove(newMove);										// 수 두기
 
 		m_boardSnapshotList.Add(newBoard);									// 리스트에 달아두기
@@ -251,7 +254,7 @@ public class GameState
 	/// </summary>
 	/// <param name="index"></param>
 	/// <returns></returns>
-	public IBoardSnapshot GetBoardStatus(int index)
+	public IBoardSnapshot GetBoardSnapshot(int index)
 	{
 		return m_boardSnapshotList[index];
 	}

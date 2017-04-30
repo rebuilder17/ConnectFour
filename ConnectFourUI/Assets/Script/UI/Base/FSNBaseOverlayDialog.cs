@@ -544,10 +544,10 @@ public partial class FSNBaseOverlayDialog : MonoBehaviour
 		OnClose();									// 시작 콜백
 		StartTransition(TransitionType.Close, () =>
 			{
-				IsOpened	= false;                // 플래그 설정
 				SafeSetActive(false);               // 비활성화 (즉시 하는 게 아니라, 이번 프레임에서 바로 켜는 경우가 아닐 때만 비활성화하도록 예약)
 				OnCloseComplete();                  // 종료 콜백
 			});
+		IsOpened	= false;						// 플래그 설정
 
 		return true;
 	}

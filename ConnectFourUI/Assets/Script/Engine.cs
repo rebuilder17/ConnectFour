@@ -32,7 +32,7 @@ public class Engine : MonoBehaviour
 
 	State			m_state;
 
-	enum PlayerType
+	public enum PlayerType
 	{
 		Selectable,				// 매턴 선택한다.
 		Human,					// 항상 사람이 착수한다.
@@ -57,22 +57,58 @@ public class Engine : MonoBehaviour
 	{
 		yield return null;
 
-		// TEST
-		m_player1Type	= PlayerType.Human;
-		m_player2Type	= PlayerType.Human;
-		//m_player2Type	= PlayerType.AI;
+		ShowGameSettingDialog();								// 게임 세팅 다이얼로그 부르기
+	}
 
+	public void RestartGame()
+	{
+		if (m_state != State.GameOver)
+		{
+			Debug.LogError("Cannot restart the game that is not over yet.");
+			return;
+		}
 
-		// 게임 초기화
+		var ui	= OverlayUI.instance;
+		ui.HideInfoPanels();									// 정보 패널 전부 감추기
+		ui.boardUI.Clear();										// 보드 클리어
 
-		m_gameState		= new GameState();
-		m_gameState.newMovePlaced += OnNewMove;
-		m_gameState.statusReport += OnGameStatusReport;
+		ShowGameSettingDialog();								// 게임 세팅 다이얼로그 부르기
+	}
+
+	/// <summary>
+	/// 게임 세팅 다이얼로그 부르기
+	/// </summary>
+	void ShowGameSettingDialog()
+	{
+		m_state			= State.Ready;
+
+		var ui			= OverlayUI.instance;
+		var dialog		= ui.GetDialog<GameSettingDialog>();
+		dialog.SetCallback((p1, p2) =>							// 확인 버튼 눌렀을 때 동작
+		{
+			m_player1Type	= p1;
+			m_player2Type	= p2;
+
+			InitializeGame();									// 게임 초기화
+		});
+
+		ui.OpenDialog<GameSettingDialog>();						// 다이얼로그 호출
+	}
+
+	/// <summary>
+	/// 게임 초기화 후 시작
+	/// </summary>
+	void InitializeGame()
+	{
+		m_gameState					= new GameState();
+		m_gameState.newMovePlaced	+= OnNewMove;
+		m_gameState.statusReport	+= OnGameStatusReport;
 
 		m_gameStateCtrl.MakeNewConnection(m_gameState);
 
-		// 바로 턴 시작 - ready 과정 스킵
-		StartTurn();
+		m_state						= State.Playing;			// 상태 세팅
+
+		StartTurn();											// 첫번째 턴 시작
 	}
 
 	/// <summary>
@@ -80,8 +116,6 @@ public class Engine : MonoBehaviour
 	/// </summary>
 	void StartTurn()
 	{
-		m_state				= State.Playing;			// 상태 세팅
-
 		OverlayUI.instance.ShowPlayingInfo(m_gameState);	// 현재 턴 정보 UI에 표시
 		
 		var nextPlayer		= m_gameState.nextPlayer;
@@ -96,6 +130,10 @@ public class Engine : MonoBehaviour
 			case PlayerType.AI:							// AI가 착수해야 하는 경우, 바로 Search 솔버 선택하기
 				SetForSearchSolving();
 				break;
+
+			case PlayerType.Selectable:					// 유저한테 고르게 해야하는 경우
+				PromptForSolverSelect();
+				break;
 		}
 	}
 
@@ -109,7 +147,9 @@ public class Engine : MonoBehaviour
 
 	IEnumerator co_setForHumanInput()
 	{
-		if (!m_gameStateCtrl.waitingForInput)					// 입력 기다리는 상태가 될 때까지 대기한다
+		yield return null;
+
+		while (!m_gameStateCtrl.waitingForInput)				// 입력 기다리는 상태가 될 때까지 대기한다
 			yield return null;
 
 		m_gameStateCtrl.InputSolverIndex(c_solverIndex_Human);	// 사람 입력을 받는 걸로 모듈쪽에 전송
@@ -126,15 +166,35 @@ public class Engine : MonoBehaviour
 		StartCoroutine(co_setForSolverWaiting(c_solverIndex_Search));
 	}
 
+	/// <summary>
+	/// AI 처리 (Rule) 상태로 세팅
+	/// </summary>
+	void SetForRuleSolving()
+	{
+		StartCoroutine(co_setForSolverWaiting(c_solverIndex_Rule));
+	}
+
 	IEnumerator co_setForSolverWaiting(int solverIndex)
 	{
-		if (!m_gameStateCtrl.waitingForInput)					// 입력 기다리는 상태가 될 때까지 대기한다
-			yield return null;
+		yield return null;
 
+		while (!m_gameStateCtrl.waitingForInput)				// 입력 기다리는 상태가 될 때까지 대기한다
+			yield return null;
+		
 		m_state = State.Solving;								// 솔버 응답 기다리는 상태로
 
 		m_gameStateCtrl.InputSolverIndex(solverIndex);
 		OverlayUI.instance.OpenDialog<WaitingDialog>();
+	}
+
+	/// <summary>
+	/// 유저한테 솔버 고르게 하는 다이얼로그 표시
+	/// </summary>
+	void PromptForSolverSelect()
+	{
+		var ui		= OverlayUI.instance;
+		ui.GetDialog<SolverSelectDialog>().Setup(m_gameState, SetForHumanInput, SetForSearchSolving, SetForRuleSolving);
+		ui.OpenDialog<SolverSelectDialog>();
 	}
 
 	/// <summary>
@@ -156,7 +216,7 @@ public class Engine : MonoBehaviour
 
 	IEnumerator co_sendMovePosition(int x, int y)
 	{
-		if (!m_gameStateCtrl.waitingForInput)				// 입력 기다리는 상태가 될 때까지 대기한다
+		while (!m_gameStateCtrl.waitingForInput)			// 입력 기다리는 상태가 될 때까지 대기한다
 			yield return null;
 
 		m_gameStateCtrl.InputMovePosition(x, y);			// 찾은 좌표를 모듈 쪽으로 보낸다.
@@ -181,8 +241,8 @@ public class Engine : MonoBehaviour
 	void OnAfterResultDialog()
 	{
 		m_state = State.GameOver;
-		
-		// TODO : 착수 리스트 보여주기
+
+		OverlayUI.instance.ShowHistory(m_gameState);		// 착수 리스트 보여주기
 	}
 
 	/// <summary>

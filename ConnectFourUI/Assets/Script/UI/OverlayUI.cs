@@ -10,6 +10,8 @@ public class OverlayUI : FSNBaseOverlayUI
 
 	[SerializeField]
 	PlayingInfoPanel	m_playingInfoPanel;
+	[SerializeField]
+	HistoryPanel		m_historyPanel;
 
 
 
@@ -36,12 +38,22 @@ public class OverlayUI : FSNBaseOverlayUI
 	public void HideInfoPanels()
 	{
 		m_playingInfoPanel.gameObject.SetActive(false);
+		m_historyPanel.gameObject.SetActive(false);
 	}
 
 	public void ShowPlayingInfo(GameState curstate)
 	{
 		m_playingInfoPanel.gameObject.SetActive(true);
+		m_historyPanel.gameObject.SetActive(false);
 
 		m_playingInfoPanel.ShowInfo(curstate);
+	}
+
+	public void ShowHistory(GameState curstate)
+	{
+		m_playingInfoPanel.gameObject.SetActive(false);
+		m_historyPanel.gameObject.SetActive(true);
+
+		m_historyPanel.ShowPopulateHistory(curstate);
 	}
 }

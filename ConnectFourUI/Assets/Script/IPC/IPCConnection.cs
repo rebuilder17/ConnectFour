@@ -149,6 +149,7 @@ public class IPCConnection
 		startInfo.RedirectStandardInput		= true;
 		startInfo.RedirectStandardOutput	= true;
 		startInfo.RedirectStandardError		= true;
+		startInfo.CreateNoWindow			= true;
 
 		m_targetProcess.StartInfo			= startInfo;
 
@@ -214,7 +215,7 @@ public class IPCConnection
 					while (m_sendQueue.Count > 0)					// 보낼 메세지가 있는 경우, 루프 시작
 					{
 						var send	= m_sendQueue.Dequeue();
-						UnityEngine.Debug.Log("need send this : " + send);
+						//UnityEngine.Debug.Log("need send this : " + send);
 						stdin.WriteLine(send);						// stdin에 보낸다
 					}
 					stdin.Flush();
@@ -260,7 +261,7 @@ public class IPCConnection
 
 		line		= line.TrimEnd();
 
-		UnityEngine.Debug.Log("received line : " + line);
+		//UnityEngine.Debug.Log("received line : " + line);
 		switch (line)
 		{
 			case c_header_await:						// 입력 기다리는 경우

@@ -21,7 +21,7 @@ public class GameStateController : MonoBehaviour
 	IPCConnection			m_connection;
 	GameState			m_gameState;
 
-	bool				m_waitForInput;
+	bool				m_waitForInput	= false;
 
 	/// <summary>
 	/// 입력받을 종류
@@ -142,7 +142,7 @@ public class GameStateController : MonoBehaviour
 			else
 			{
 				var msg	= message.message;
-				Debug.Log("[message] " + msg);
+				//Debug.Log("[message] " + msg);
 
 				if (msg == c_msgHeader_solverStart)							// solverStart 메세지를 만난 경우, 스테이트 변경
 				{
@@ -216,7 +216,7 @@ public class GameStateController : MonoBehaviour
 				m_state				= State.SelectSolver;
 				m_waitForInput		= true;
 
-				Debug.Log("waiting for input : " + m_requestedInput);
+				//Debug.Log("waiting for input : " + m_requestedInput);
 			}
 
 			while (m_waitForInput)									// 입력 해결될 때까지 기다린다.
