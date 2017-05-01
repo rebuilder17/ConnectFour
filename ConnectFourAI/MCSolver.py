@@ -5,44 +5,48 @@ import connect4
 import random
 #import threading
 import multiprocessing
+import array
 
 random.seed()
 
 _WIDTH	= connect4.Judge.BOARD_WIDTH
 _HEIGHT	= connect4.Judge.BOARD_HEIGHT
+_MOVETYPE_PLAYER1 = connect4.Judge.Move.MOVETYPE_PLAYER1
 
 
 # Monte Carlo 방법을 쓰는 Solver
 class MCSolver(connect4.BaseSolver):
 	class Board:
-		def __init__(self, origboard=None):
-			self.width	= _WIDTH
-			self.height	= _HEIGHT
+		__slots__ = ['board']
+		_emptyboard = [0 for x in range(_WIDTH * _HEIGHT)]
 
+		def __init__(self, origboard=None):
 			if origboard:	# 원본 보드가 지정되었으면 복제
-				#self.board = list(list(row) for row in origboard.board)
-				self.board = [x for x in origboard.board]
+				#self.board = [x for x in origboard.board]
+				self.board = array.array('b', origboard.board)
 			else:
-				#self.board = list([None] * self.width for y in range(self.height))
-				self.board = [None for x in range(self.width * self.height)]
+				#self.board = [None for x in range(_WIDTH * _HEIGHT)]
+				self.board = array.array('b', MCSolver.Board._emptyboard)
 
 		def positionToIndex(self, x, y):
-			return y * self.width + x
+			return y * _WIDTH + x
 
 		def copyFromJudge(self, judge):
-			for y in range(self.height):
-				for x in range(self.width):
+			for y in range(_HEIGHT):
+				for x in range(_WIDTH):
 					move = judge.getMoveOnBoard(x, y)
 					if move:
-						self.board[self.positionToIndex(x, y)] = move.type == connect4.Judge.Move.MOVETYPE_PLAYER1
+						self.board[self.positionToIndex(x, y)] = 1 if move.type == _MOVETYPE_PLAYER1 else 2
 
 		def boundaryCheck(self, x, y):
-			return 0 <= x < self.width and 0 <= y < self.height
+			return 0 <= x < _WIDTH and 0 <= y < _HEIGHT
 
 		def canPlace(self, x, y):
-			return self.boundaryCheck(x, y) and self.board[self.positionToIndex(x, y)] is None
+			#return self.boundaryCheck(x, y) and self.board[self.positionToIndex(x, y)] is None
+			return self.boundaryCheck(x, y) and self.board[self.positionToIndex(x, y)] == 0
 
 		def placeAndCheck(self, x, y, moveType):
+			moveType = 1 if moveType == True else 2
 			self.board[self.positionToIndex(x, y)] = moveType
 
 			return self._samerowcheck(moveType, x, y, 1, 0) + self._samerowcheck(moveType, x, y, -1, 0) >= 3 or \
@@ -65,6 +69,8 @@ class MCSolver(connect4.BaseSolver):
 
 	class Tree:
 		class Node:
+			__slots__ = ['parent', 'board', 'key', 'p1count', 'p2count', 'x', 'y', 'finished', 'finisherIsP1']
+
 			def __init__(self, parent=None, copyFrom=None):
 				if copyFrom:			# 다른 노드의 복제본을 만드는 경우. (Tree끼리 합성할 때)
 
@@ -192,8 +198,8 @@ class MCSolver(connect4.BaseSolver):
 			print('weightedSearchProb : {}, trycount : {}'.format(self.weightedSearchProb, self.trycount))
 
 			# 최적화 위한 local cacheing
-			width			= self.root.board.width
-			height			= self.root.board.height
+			width			= _WIDTH
+			height			= _HEIGHT
 			indexes			= [x for x in range(width)]
 			shuffledIdx		= [x for x in range(width)]
 			random_random	= random.random
@@ -291,11 +297,12 @@ class MCSolver(connect4.BaseSolver):
 	# multiprocessing용
 	def _tree_process(self, treeOriginal, outQueue):
 		tree = MCSolver.Tree(originalTreeList=[treeOriginal])  # 트리 복제하기
+		treeOriginal = None
 		tree.startSearch()  # 검색 시작
 		outQueue.put(tree)
 
 
-	def __init__(self, name, weightedSearchProb = 0.9, trycount = 10000, phasecount = 2, threadcount = 4):
+	def __init__(self, name, weightedSearchProb = 0.9, trycount = 10000, phasecount = 1, threadcount = 8):
 		super().__init__(name)
 		self.weightedSearchProb	= weightedSearchProb			# 비중에 따른 서치를 얼마만큼 비율로 할지
 		self.trycount			= trycount						# 탐색 횟수
@@ -327,9 +334,14 @@ class MCSolver(connect4.BaseSolver):
 				processlist.append(p)
 				queuelist.append(q)
 
+			tree = None
+
 			for i in range(self.threadcount):					# 쓰레드 모두 끝날때까지 기다리기
 				treelist.append(queuelist[i].get())
 				processlist[i].join()
+
+			processlist = None
+			queuelist	= None
 
 			print('phase over. synthesizing trees...')
 			# 각 쓰레드에서 만든 트리 합성하기. 다음 페이즈 혹은 결과에 사용한다.
@@ -337,8 +349,8 @@ class MCSolver(connect4.BaseSolver):
 		'''
 
 		placelist	= []
-		for x in range(board.width):							# 트리의 루트에서 각 x좌표마다 자식 노드가 있는지 검색해본다 
-			xkey	= 1 * board.width + x
+		for x in range(_WIDTH):									# 트리의 루트에서 각 x좌표마다 자식 노드가 있는지 검색해본다
+			xkey	= 1 * _WIDTH + x
 			if xkey in tree.nodeDict:							# 실제로는 dictionary에서 문자열 키로 검색
 				node	= tree.nodeDict[xkey]
 				p1c		= node.p1count
