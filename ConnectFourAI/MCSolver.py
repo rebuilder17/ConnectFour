@@ -15,25 +15,30 @@ class MCSolver(connect4.BaseSolver):
 			self.height	= connect4.Judge.BOARD_HEIGHT
 
 			if origboard:	# 원본 보드가 지정되었으면 복제
-				self.board = list(list(row) for row in origboard.board)
+				#self.board = list(list(row) for row in origboard.board)
+				self.board = list(origboard.board)
 			else:
-				self.board = list([None] * self.width for y in range(self.height))
+				#self.board = list([None] * self.width for y in range(self.height))
+				self.board = [None] * (self.width * self.height)
+
+		def positionToIndex(self, x, y):
+			return y * self.width + x
 
 		def copyFromJudge(self, judge):
 			for y in range(self.height):
 				for x in range(self.width):
 					move = judge.getMoveOnBoard(x, y)
 					if move:
-						self.board[y][x] = move.type == connect4.Judge.Move.MOVETYPE_PLAYER1
+						self.board[self.positionToIndex(x, y)] = move.type == connect4.Judge.Move.MOVETYPE_PLAYER1
 
 		def boundaryCheck(self, x, y):
 			return 0 <= x < self.width and 0 <= y < self.height
 
 		def canPlace(self, x, y):
-			return self.boundaryCheck(x, y) and self.board[y][x] is None
+			return self.boundaryCheck(x, y) and self.board[self.positionToIndex(x, y)] is None
 
 		def placeAndCheck(self, x, y, moveType):
-			self.board[y][x] = moveType
+			self.board[self.positionToIndex(x, y)] = moveType
 
 			return self._samerowcheck(moveType, x, y, 1, 0) + self._samerowcheck(moveType, x, y, -1, 0) >= 3 or \
 					self._samerowcheck(moveType, x, y, 1, 1) + self._samerowcheck(moveType, x, y, -1, -1) >= 3 or \
@@ -47,7 +52,7 @@ class MCSolver(connect4.BaseSolver):
 			for n in range(3):
 				x += stepx
 				y += stepy
-				if (not self.boundaryCheck(x, y)) or self.board[y][x] != moveType:
+				if (not self.boundaryCheck(x, y)) or self.board[self.positionToIndex(x, y)] != moveType:
 					break
 				else:
 					count += 1
@@ -61,10 +66,12 @@ class MCSolver(connect4.BaseSolver):
 				if parent:
 					self.board	= MCSolver.Board(parent.board)
 
+				# Note : key를 정수 타입으로 바꿈. 아무런 수도 두지 않은 상태에서의 기본값은 1.
+				# 수를 한번 둘 때마다 기존 키 * width + 새로운 x좌표로 인코딩된다.
 				if parent:
 					self.key	= parent.key
 				else:
-					self.key	= ""
+					self.key	= 1
 
 				self.p1count		= 0  # p1이 이긴 횟수
 				self.p2count		= 0  # p2가 이긴 횟수
@@ -97,6 +104,9 @@ class MCSolver(connect4.BaseSolver):
 						node.p2count += 1
 					node = node.parent
 
+			def createNextKey(self, x):
+				return self.key * self.board.width + x
+
 
 		def __init__(self, rootBoard, isP1Turn):
 			self.nodeDict	= {}
@@ -108,7 +118,7 @@ class MCSolver(connect4.BaseSolver):
 			self.trycount	= 10000
 
 		def startSearch(self):
-			self.nodeDict = {'': self.root}
+			self.nodeDict = {1 : self.root}
 			#nodeStack = [self.root]
 			print('weightedSearchProb : {}, trycount : {}'.format(self.weightedSearchProb, self.trycount))
 
@@ -130,7 +140,7 @@ class MCSolver(connect4.BaseSolver):
 
 						# 승리 횟수로 weight 계산
 						for x in range(width):
-							newKey		= node.key + str(x)
+							newKey		= node.createNextKey(x)
 							if newKey in self.nodeDict:
 								pick	= self.nodeDict[newKey]
 								# p1차례면 p1에게 유리한 쪽으로, p2차례면 p2에게 유리한 쪽으로 weight를 준다.
@@ -162,7 +172,7 @@ class MCSolver(connect4.BaseSolver):
 
 						for y in range(node.board.height):						# y좌표를 올라가면서 착수점을 찾는다.
 							if node.board.canPlace(x, y):						# 둘 수 있는 곳을 찾았으면
-								newKey = node.key + str(x)  					# key 생성 (x 좌표만으로 구성된 sequence)
+								newKey = node.createNextKey(x)  				# key 생성 (x 좌표만으로 구성된 sequence)
 								#print("check key : " + newKey)
 
 								if newKey in self.nodeDict:						# 같은 키를 지닌 수가 이미 있다면 가져온다.
@@ -206,7 +216,7 @@ class MCSolver(connect4.BaseSolver):
 
 		placelist	= []
 		for x in range(board.width):							# 트리의 루트에서 각 x좌표마다 자식 노드가 있는지 검색해본다 
-			xkey	= str(x)
+			xkey	= 1 * board.width + x
 			if xkey in tree.nodeDict:							# 실제로는 dictionary에서 문자열 키로 검색
 				node	= tree.nodeDict[xkey]
 				p1c		= node.p1count

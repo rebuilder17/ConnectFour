@@ -26,4 +26,3 @@ def receive():
 	line	= sys.stdin.readline()
 	return line.rstrip() if line else line
 
-''
