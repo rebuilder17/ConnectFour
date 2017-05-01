@@ -16,8 +16,8 @@ public class BoardStone : MonoBehaviour
 
 	static readonly Dictionary<ColorPreset, Color> c_colorDict = new Dictionary<ColorPreset, Color>()
 	{
-		{ ColorPreset.Player1, new Color(1, 1, 1) },
-		{ ColorPreset.Player2, new Color(0.2f, 0.2f, 0.2f) },
+		{ ColorPreset.Player1, new Color(1, 0, 0) },
+		{ ColorPreset.Player2, new Color(1, 1, 0) },
 	};
 
 	public static Color GetColorFromPreset(ColorPreset preset)
