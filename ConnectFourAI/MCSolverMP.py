@@ -7,12 +7,23 @@ import random
 import multiprocessing
 import array
 import collections
+import os
 
 random.seed()
 
 _WIDTH	= connect4.Judge.BOARD_WIDTH
 _HEIGHT	= connect4.Judge.BOARD_HEIGHT
 _MOVETYPE_PLAYER1 = connect4.Judge.Move.MOVETYPE_PLAYER1
+
+_PROT_getnode = 0x1001
+_PROT_findypos = 0x1002
+_PROT_wincount = 0x1003
+_PROT_newnodeplace = 0x1004
+_PROT_getallnextnode = 0x1005
+_PROT_iterover = 0x2000
+
+_PROT_noreturn = object()
+
 
 
 # Monte Carlo 방법을 쓰는 Solver
@@ -151,9 +162,16 @@ class MCSolverMP(connect4.BaseSolver):
 				# 같은 key를 지니는 노드들끼리는 승리 카운터 이외의 모든 정보가 동일해야 한다.
 
 
+		'''
 		# 프로세스끼리 Node 정보를 공유하기 위한 클래스
-		NodeData = collections.namedtuple('NodeData', ['key', 'finished'])
-
+		class NodeData:
+			__slots__ = ('key', 'finished', 'p1count', 'p2count')
+			def __init__(self, key, finished, p1count, p2count):
+				self.key = key
+				self.finished = finished
+				self.p1count = p1count
+				self.p2count = p2count
+		'''
 
 		def __init__(self, rootBoard = None, isP1Turn = None, originalTreeList = None):
 
@@ -198,41 +216,64 @@ class MCSolverMP(connect4.BaseSolver):
 		def processPipe(self, recv):
 			msg = recv[0]
 
-			if msg == 'getnode':	# parameter 1:key
+			if msg == _PROT_getnode:	# parameter 1:key
 				key = recv[1]
 				try:
 					node = self.nodeDict[key]
-					return MCSolverMP.Tree.NodeData(key=node.key, finished=node.finished)
+					return { 'key':node.key, 'finished':node.finished }
 				except KeyError:
 					return None
 
-				pass
-
-			elif msg == 'canplace':	# parameter 1:key 2:x 3:y
+			elif msg == _PROT_findypos: # parameter 1:key 2:x
 				key = recv[1]
+				x = recv[2]
 				node = self.nodeDict[key]
-				return node.board.canPlace(recv[2], recv[3])
+				board = node.board
+				for y in range(_HEIGHT):
+					if board.canPlace(x, y):
+						return y
+				return None
 
-			elif msg == 'wincount':	# parameter 1:key
+			elif msg == _PROT_wincount:	# parameter 1:key
 				key = recv[1]
 				node = self.nodeDict[key]
 				node.propagateWinCount()
-				return None
+				return _PROT_noreturn
 
-			elif msg == 'newnodeplace':	# parameter 1:parentkey 2:newkey 3:x, 4:y, 5:currentP1Turn
+			elif msg == _PROT_newnodeplace:	# parameter 1:parentkey 2:newkey 3:x, 4:y, 5:currentP1Turn
 				key = recv[1]
 				newKey = recv[2]
 				node = self.nodeDict[key]
 				newNode = MCSolverMP.Tree.Node(node)
 				newNode.key = newKey
 				self.nodeDict[newKey] = newNode
-				return newNode.place(recv[3], recv[4], recv[5])
+				#return newNode.place(recv[3], recv[4], recv[5])
+				if newNode.place(recv[3], recv[4], recv[5]):	# 수를 둬서 끝난 경우엔 None 리턴
+					return None
+				else:											# 아직 안끝난 경우엔 새로 생성한 노드 자체를 리턴
+					return { 'key' : newNode.key, 'finished': newNode.finished }
 
+			elif msg == _PROT_getallnextnode:	# parameter 1:key
+				key = recv[1]
+				nextNodeList = [None for x in range(_WIDTH)]
+				for x in range(_WIDTH):
+					nextKey = key * _WIDTH + x
+					try:
+						node = self.nodeDict[nextKey]
+						nextNodeList[x] = { 'p1count':node.p1count, 'p2count':node.p2count }
+					except KeyError:
+						pass
+				return nextNodeList
+
+			elif msg == _PROT_iterover:
+				return 'iterover'
+
+			print('wrong message : ' , msg)
 			raise Exception
 
 
 		# pipe를 사용하는 search
-		def startSearch_withProtocol(self, pipe):
+		def startSearch_withProtocol(self, pipesend, piperecv):
 			# self.nodeDict = {1 : self.root}
 			# nodeStack = [self.root]
 			print('weightedSearchProb : {}, trycount : {}'.format(self.weightedSearchProb, self.trycount))
@@ -250,15 +291,20 @@ class MCSolverMP(connect4.BaseSolver):
 			##############################
 
 			for trycount in range(self.trycount):  # 지정한 횟수만큼 탐색을 반복한다.
+				if trycount % 1000 == 0 and trycount != 0:
+					print('iteration ' , trycount)
+
 				#node = self.root
-				pipe.send(('getnode', 1))
-				node = pipe.recv() # return : NodeData
+				pipesend.send((_PROT_getnode, 1))
+				node = piperecv.recv() # return : NodeData
 				currentP1Turn = self.isP1Turn
 
 				while node:  # 다음에 검색할 노드가 없을 때까지 반복
 					nextNode = None
 					shouldBreak = False
 					xlist = None
+
+					key = node['key']
 
 					if random_random() >= weightedSearchProb:  # *** 일정 확률로 동일하게 랜덤으로 찾는다.
 						random_shuffle(shuffledIdx)
@@ -267,15 +313,13 @@ class MCSolverMP(connect4.BaseSolver):
 						xweight = [0 for x in range(width)]
 
 						# 승리 횟수로 weight 계산
+						pipesend.send((_PROT_getallnextnode, key))
+						nextNodeList = piperecv.recv()
 						for x in range(width):
-							newKey = node.key * _WIDTH + x #### PROTOCOL
-
-							# pick = nodeDict[newKey] #### PROTOCOL
-							pipe.send(('getnode', newKey))
-							pick = pipe.recv()
+							pick = nextNodeList[x]
 							if pick:
 								# p1차례면 p1에게 유리한 쪽으로, p2차례면 p2에게 유리한 쪽으로 weight를 준다.
-								xweight[x] = (pick.p1count - pick.p2count) * (1 if currentP1Turn else -1)
+								xweight[x] = (pick['p1count'] - pick['p2count']) * (1 if currentP1Turn else -1)
 
 						minw = min(xweight) - 1
 						if minw < 0:  # weight 최소값이 1이 되도록 맞춰준다. (0, 음수값 weight 방지)
@@ -295,56 +339,60 @@ class MCSolverMP(connect4.BaseSolver):
 						if shouldBreak:  # 루프를 깨야하는 경우 (승부가 난 경우)
 							break
 
-						for y in range(height):  # y좌표를 올라가면서 착수점을 찾는다.
-							#if node.board.canPlace(x, y):  # 둘 수 있는 곳을 찾았으면 #### PROTOCOL
-							pipe.send(('canplace', node.key))
-							canPlace = pipe.recv()
-							if canPlace:  # 둘 수 있는 곳을 찾았으면 #### PROTOCOL
-								#newKey = node_createNextKey(x)  # key 생성 (x 좌표만으로 구성된 sequence) #### PROTOCOL
-								newKey = node.key * _WIDTH + x
+						pipesend.send((_PROT_findypos, key, x))
+						y = piperecv.recv()
+						if y is not None:  # 둘 수 있는 곳을 찾았으면 #### PROTOCOL
+							#newKey = node_createNextKey(x)  # key 생성 (x 좌표만으로 구성된 sequence) #### PROTOCOL
+							newKey = key * _WIDTH + x
 
-								#cached = nodeDict[newKey]  #### PROTOCOL
-								pipe.send(('getnode', newKey))						# 같은 키를 지닌 수가 이미 있다면 가져온다.
-								cached = pipe.recv()
+							#cached = nodeDict[newKey]  #### PROTOCOL
+							pipesend.send((_PROT_getnode, newKey))						# 같은 키를 지닌 수가 이미 있다면 가져온다.
+							cached = piperecv.recv()
 
-								if cached:
-									if cached.finished:  # 승부가 이미 난 노드라면, 다시 한 번 승률 카운트를 해준다.
-										#cached.propagateWinCount() #### PROTOCOL
-										pipe.send(('wincount', cached.key))
-										shouldBreak = True  # x좌표를 새로 찾을 필요 없음. 다음 회차로 넘어가도록 한다
-									else:  # 승부가 안 난 경우엔 계속 검색
-										#nextNode = cached #### PROTOCOL
-										pipe.send(('getnode', cached.key))
-										nextNode = pipe.recv()
-								else:											# 새로운 수일 경우, 새로 노드를 만들어야함
-									#newNode = MCSolverMP.Tree.Node(node) #### PROTOCOL
-									#newNode.key = newKey
-									#nodeDict[newKey] = newNode  # 캐싱하기
+							if cached:
+								if cached['finished']:  # 승부가 이미 난 노드라면, 다시 한 번 승률 카운트를 해준다.
+									#cached.propagateWinCount() #### PROTOCOL
+									pipesend.send((_PROT_wincount, cached['key']))
+									#piperecv.recv() # returns None
+									shouldBreak = True  # x좌표를 새로 찾을 필요 없음. 다음 회차로 넘어가도록 한다
+								else:  # 승부가 안 난 경우엔 계속 검색
+									#nextNode = cached #### PROTOCOL
+									pipesend.send((_PROT_getnode, cached['key']))
+									nextNode = piperecv.recv()
+							else:											# 새로운 수일 경우, 새로 노드를 만들어야함
+								#newNode = MCSolverMP.Tree.Node(node) #### PROTOCOL
+								#newNode.key = newKey
+								#nodeDict[newKey] = newNode  # 캐싱하기
 
-									pipe.send(('newnodeplace', node.key, newKey, x, y, currentP1Turn))
-									win = pipe.recv()
+								pipesend.send((_PROT_newnodeplace, key, newKey, x, y, currentP1Turn))
+								nextNode = piperecv.recv()	# 두었는데 승부가 안난 경우엔 검색을 계속하기 위해 새 nextNode가 지정된다.
+								if nextNode is None:		# 승부가 난 경우 (리턴값 None)
+									shouldBreak = True  # x좌표를 새로 찾을 필요 없음. 다음 회차로 넘어가도록 한다
 
-									#if not newNode.place(x, y, currentP1Turn):  # 두었는데 승부가 나지 않았다면 계속 검색해야한다 #### PROTOCOL
-									if not win:  # 두었는데 승부가 나지 않았다면 계속 검색해야한다 #### PROTOCOL
-										#nextNode = newNode #### PROTOCOL
-										pipe.send(('getnode', newKey))
-										nextNode = pipe.recv()
-									else:  # 승부가 난 경우
-										# print ("new finish : " + newKey)
-										shouldBreak = True  # x좌표를 새로 찾을 필요 없음. 다음 회차로 넘어가도록 한다
-
-								break  # 수를 둔 뒤에는 위쪽 y좌표를 찾는 게 무의미함
+								#if not newNode.place(x, y, currentP1Turn):  # 두었는데 승부가 나지 않았다면 계속 검색해야한다 #### PROTOCOL
+								#if not win:  # 두었는데 승부가 나지 않았다면 계속 검색해야한다 #### PROTOCOL
+									#pipesend.send((_PROT_getnode, newKey))
+									#nextNode = piperecv.recv()
+								#else:  # 승부가 난 경우
+									# print ("new finish : " + newKey)
+									#shouldBreak = True  # x좌표를 새로 찾을 필요 없음. 다음 회차로 넘어가도록 한다
 
 					node = nextNode  # 위에서 찾은 "다음 노드"를 사용
 					currentP1Turn = not currentP1Turn  # 턴이 넘어가므로 플래그 반전
 
+			print ('iteration finished')
+			pipesend.send((_PROT_iterover, ))
+
+
 	# multiprocessing용
-	def _tree_process(self, board, isP1, pipe):
+	def _tree_process(self, board, isP1, wsp, tc, pipesend, piperecv):
 		tree = MCSolverMP.Tree(board, isP1)	# 더미 트리 만들기
-		tree.startSearch_withProtocol(pipe)  # 검색 시작
+		tree.weightedSearchProb = wsp
+		tree.trycount = tc
+		tree.startSearch_withProtocol(pipesend, piperecv)  # 검색 시작
 
 
-	def __init__(self, name, weightedSearchProb = 0.9, trycount = 10000, phasecount = 1, threadcount = 1):
+	def __init__(self, name, weightedSearchProb = 0.9, trycount = 10000, phasecount = 1, threadcount = 8):
 		super().__init__(name)
 		self.weightedSearchProb	= weightedSearchProb			# 비중에 따른 서치를 얼마만큼 비율로 할지
 		self.trycount			= trycount						# 탐색 횟수
@@ -365,28 +413,35 @@ class MCSolverMP(connect4.BaseSolver):
 		##### multi threaded #####
 		for phase in range(self.phasecount):					# 페이즈 횟수만큼 반복
 			print('phase start : ', phase + 1)
-			processlist	= []
-			pipelist	= []
+			processlist		= []
+			pipesendlist	= []
+			piperecvlist	= []
 			for tidx in range(self.threadcount):				# 쓰레드 수 만큼 반복
-				p_parent, p_child = multiprocessing.Pipe()
-				p		= multiprocessing.Process(target=self._tree_process, args=(board, isP1, p_child, ))
+				p_child_recv, p_parent_send = multiprocessing.Pipe(duplex=False)
+				p_parent_recv, p_child_send = multiprocessing.Pipe(duplex=False)
+
+				p		= multiprocessing.Process(target=self._tree_process, args=(board, isP1, self.weightedSearchProb, self.trycount, p_child_send, p_child_recv,))
 				p.start()
 				processlist.append(p)
-				pipelist.append(p_parent)
+				pipesendlist.append(p_parent_send)
+				piperecvlist.append(p_parent_recv)
 
-			keepRunning = True
-			while keepRunning:									# 파이프라인 메세지 처리 루프
+			alivecount = self.threadcount
+			while alivecount > 0:									# 파이프라인 메세지 처리 루프
 				for i in range(self.threadcount):
-					pipe = pipelist[i]
-					recv = pipe.recv()
-					send = tree.processPipe(recv)
-					pipe.send(send)
+					p = processlist[i]
+					if p.is_alive():								# 살아있는 프로세스만 처리 (join된 건 스킵)
+						piperecv = piperecvlist[i]
+						#if piperecv.poll():							# 데이터가 있을 때만 처리
+						recv = piperecv.recv()
+						send = tree.processPipe(recv)
+						if send == 'iterover':
+							p.join()
+							alivecount -= 1
+						else:
+							if send != _PROT_noreturn:
+								pipesendlist[i].send(send)
 
-				keepRunning = False
-				for i in range(self.threadcount):
-					if processlist[i].is_alive():
-						keepRunning = True
-						break
 
 		placelist	= []
 		for x in range(_WIDTH):									# 트리의 루트에서 각 x좌표마다 자식 노드가 있는지 검색해본다

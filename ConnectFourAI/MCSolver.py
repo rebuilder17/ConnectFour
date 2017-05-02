@@ -6,6 +6,7 @@ import random
 #import threading
 import multiprocessing
 import array
+import math
 
 random.seed()
 
@@ -226,6 +227,7 @@ class MCSolver(connect4.BaseSolver):
 						xlist	= shuffledIdx
 					else:												# *** 나머지 확률로 weight를 따진다.
 						xweight	= [0 for x in range(width)]
+						wsign	= 1 if currentP1Turn else -1
 
 						# 승리 횟수로 weight 계산
 						for x in range(width):
@@ -233,8 +235,8 @@ class MCSolver(connect4.BaseSolver):
 							#if newKey in self.nodeDict:
 							try:
 								pick	= nodeDict[newKey]
-								# p1차례면 p1에게 유리한 쪽으로, p2차례면 p2에게 유리한 쪽으로 weight를 준다.
-								xweight[x] = (pick.p1count-pick.p2count) * (1 if currentP1Turn else -1)
+								# p1차례면 p1에게 유리한 쪽으로, p2차례면 p2에게 유리한 쪽으로 weight를 준다. (wsign)
+								xweight[x] = (pick.p1count-pick.p2count) * wsign
 							except KeyError:
 								pass
 
@@ -299,10 +301,23 @@ class MCSolver(connect4.BaseSolver):
 		tree = MCSolver.Tree(originalTreeList=[treeOriginal])  # 트리 복제하기
 		treeOriginal = None
 		tree.startSearch()  # 검색 시작
-		outQueue.put(tree)
+		#outQueue.put(tree)
+
+		# 빠른 트리 합성 사용 - root의 첫번째 자식들만 리턴한다.
+		childs = []
+		for x in range(_WIDTH):
+			key = 1 * _WIDTH + x
+			node = None
+			try:
+				node = tree.nodeDict[key]
+			except KeyError:
+				pass
+			childs.append(node)
+
+		outQueue.put(childs)
 
 
-	def __init__(self, name, weightedSearchProb = 0.9, trycount = 10000, phasecount = 1, threadcount = 8):
+	def __init__(self, name, weightedSearchProb = 0.9, trycount = 10000, phasecount = 1, threadcount = 4):
 		super().__init__(name)
 		self.weightedSearchProb	= weightedSearchProb			# 비중에 따른 서치를 얼마만큼 비율로 할지
 		self.trycount			= trycount						# 탐색 횟수
@@ -315,18 +330,27 @@ class MCSolver(connect4.BaseSolver):
 		board.copyFromJudge(judge)
 
 		tree					= MCSolver.Tree(board, isP1)	# 검색용 트리 생성
-		tree.weightedSearchProb	= self.weightedSearchProb
-		tree.trycount			= self.trycount
+		treelist				= []
 
-		tree.startSearch()										# 계산 시작 (Single Threaded)
+		if self.threadcount == 1:								# single threaded
+			tree.weightedSearchProb = self.weightedSearchProb
+			tree.trycount = self.trycount
+			tree.startSearch()  # 계산 시작 (Single Threaded)
 
-		##### multi threaded #####
-		'''
-		for phase in range(self.phasecount):					# 페이즈 횟수만큼 반복
-			print('phase start : ', phase + 1)
+		else:													# multithreaded
+			tree.weightedSearchProb	= 0
+			tree.trycount			= self.trycount // 10
+			print('phase 1 start')
+			tree.startSearch()										# 계산 시작 (Single Threaded) - 초벌 서치?
+
+			tree.weightedSearchProb = self.weightedSearchProb
+			tree.trycount = self.trycount
+
+			##### multi threaded #####
+			print('phase 2 start')
 			processlist	= []
 			queuelist	= []
-			treelist	= []
+
 			for tidx in range(self.threadcount):				# 쓰레드 수 만큼 반복
 				q		= multiprocessing.Queue()
 				p		= multiprocessing.Process(target=self._tree_process, args=(tree, q, ))
@@ -345,21 +369,41 @@ class MCSolver(connect4.BaseSolver):
 
 			print('phase over. synthesizing trees...')
 			# 각 쓰레드에서 만든 트리 합성하기. 다음 페이즈 혹은 결과에 사용한다.
-			tree	= MCSolver.Tree(originalTreeList=treelist)
-		'''
+			#tree	= MCSolver.Tree(originalTreeList=treelist)
+
 
 		placelist	= []
 		for x in range(_WIDTH):									# 트리의 루트에서 각 x좌표마다 자식 노드가 있는지 검색해본다
-			xkey	= 1 * _WIDTH + x
-			if xkey in tree.nodeDict:							# 실제로는 dictionary에서 문자열 키로 검색
-				node	= tree.nodeDict[xkey]
-				p1c		= node.p1count
-				p2c		= node.p2count
-				csum	= max(1, p1c + p2c)
 
-				newplace	= { 'x':node.x, 'y':node.y, 'p1prob' : p1c/csum, 'p2prob' : p2c/csum}
-				print('({},{}) - p1c : {}, p2c : {}'.format(newplace['x'], newplace['y'], newplace['p1prob'], newplace['p2prob']))
-				placelist.append(newplace)
+			node = None
+			p1c = 0
+			p2c = 0
+			csum = None
+
+			if self.threadcount == 1:
+				xkey	= 1 * _WIDTH + x
+				if xkey in tree.nodeDict:							# 실제로는 dictionary에서 문자열 키로 검색
+					node	= tree.nodeDict[xkey]
+					p1c		= node.p1count
+					p2c		= node.p2count
+
+
+			else:
+				# 멀티코어 연산시 빠른 트리 합성 사용
+				for clist in treelist:
+					cnode = clist[x]
+					if cnode:
+						node = cnode
+						p1c += cnode.p1count
+						p2c += cnode.p2count
+
+			csum = max(1, p1c + p2c)
+			newplace = {'x': node.x, 'y': node.y, 'p1prob': p1c / csum, 'p2prob': p2c / csum}
+			print('({},{}) - p1c : {}, p2c : {}'.format(newplace['x'], newplace['y'], newplace['p1prob'],
+														newplace['p2prob']))
+			placelist.append(newplace)
+
+
 
 		placelist.sort(key=lambda item:item['p1prob'], reverse=isP1)	# 현재 턴에 맞는 승률 높은 쪽으로 정렬
 		choosen	= placelist[0]
