@@ -4,7 +4,7 @@ if __name__ == '__main__':
 
 	import connect4
 	from MCSolver import *
-	from MCSolverMP import *
+	#from MCSolverMP import *
 
 
 	judgeobj	= connect4.Judge()
@@ -13,14 +13,14 @@ if __name__ == '__main__':
 	#judgeobj.setPlayer1Solver(connect4.RandomSolver('Player1Random'))
 	#judgeobj.setPlayer1Solver(MCSolver('Player1MC', 0.0))
 	#judgeobj.setPlayer1Solver(MCSolver('Player1MC v2', 0.9))
-	judgeobj.setPlayer1Solver(MCSolver('Player2MC v4', 0.99, 80000, threadcount=4))
+	judgeobj.setPlayer1Solver(MCSolver('Player1MC v4', 1.00, 80000, threadcount=4))
 	#judgeobj.setPlayer1Solver(MCSolverMP('Player1MC v5', 0.99, 10000, threadcount=4))
 
 	#judgeobj.setPlayer2Solver(connect4.HumanSolver('Player2Human'))
 	#judgeobj.setPlayer2Solver(connect4.RandomSolver('Player2Random'))
 	#judgeobj.setPlayer2Solver(MCSolver('Player2MC v2', 0.9))
 	#judgeobj.setPlayer2Solver(MCSolver('Player2MC v3', 0.95, 50000))
-	judgeobj.setPlayer2Solver(MCSolver('Player2MC v4', 0.99, 80000, threadcount=4))
+	judgeobj.setPlayer2Solver(MCSolver('Player2MC v4', 1.00, 80000, threadcount=4))
 	#judgeobj.setPlayer2Solver(MCSolverMP('Player2MC v5', 0.99, 10000, threadcount=4))
 
 	judgeobj.setJudgeOutput(connect4.SimpleJudgeOutput())
