@@ -7,6 +7,7 @@ import random
 import multiprocessing
 import array
 import math
+import time
 
 random.seed()
 
@@ -133,7 +134,7 @@ class MCSolver(connect4.BaseSolver):
 				node = self
 				
 				# 내가 이기는 경우, 먼 수일수록 영향력이 증대하도록.
-				add = 1
+				add = 2
 				#addstep = 1
 
 				# 상대가 이기는 경우, 가까운 수일수록 영향력이 증대하도록.
@@ -239,7 +240,7 @@ class MCSolver(connect4.BaseSolver):
 
 
 		def startSearch(self):
-			print('weightedSearchProb : {}, trycount : {}'.format(self.weightedSearchProb, self.trycount))
+			#print('weightedSearchProb : {}, trycount : {}'.format(self.weightedSearchProb, self.trycount))
 
 			# 최적화 위한 local cacheing
 			width			= _WIDTH
@@ -317,7 +318,10 @@ class MCSolver(connect4.BaseSolver):
 									cached	= nodeDict[newKey]
 									if cached.finished:							# 승부가 이미 난 노드라면, 다시 한 번 승률 카운트를 해준다.
 										cached.propagateWinCount(starterIsP1)
+										# TEST 2 : 승리 카운트를 하되, 다른 좌표도 한번 더 찾아본다
 										shouldBreak	= True						# x좌표를 새로 찾을 필요 없음. 다음 회차로 넘어가도록 한다
+										# TEST : 승리 카운트를 하지 않고 다른 X 좌표를 찾도록 해본다
+										#pass
 									else:										# 승부가 안 난 경우엔 계속 검색
 										nextNode	= cached
 								#else:
@@ -369,24 +373,31 @@ class MCSolver(connect4.BaseSolver):
 		resultlist = []
 		for x in range(_WIDTH):  # x좌표 리스트를 뽑아본다
 			xkey = 1 * _WIDTH + x
-			summary = None
 			if xkey in tree.nodeDict:
 				node = tree.nodeDict[xkey]
 				summary = self._genSummaryFromNodes((node,))
-			resultlist.append(summary)
+				resultlist.append(summary)
 
 		return resultlist
 
 	def _genSummaryFromNodeListList(self, nodell):
 		resultlist = []
-		for x in range(_WIDTH):
-			nodes = [l[x] for l in nodell]
-			summary = self._genSummaryFromNodes(nodes) if len(nodes) > 0 else None
-			resultlist.append(summary)
+		for x in range(_WIDTH):			# 같은 x좌표에 있는 것들끼리 모으기 위해서...
+			nodes = []
+			for l in nodell:
+				node = l[x]
+				if node:				# None이 아닌 것들만 nodes 리스트에 넣는다
+					nodes.append(node)
+			
+			if len(nodes) > 0:
+				summary = self._genSummaryFromNodes(nodes)
+				resultlist.append(summary)
 
 		return resultlist
 
 	def nextMove(self, judge):
+		startTime	= time.time()
+
 		isP1	= judge.nextTurnIsP1()							# 검색을 시작하는 시점에서 누구 턴인지 판단
 		board	= MCSolver.Board()								# 보드 생성 (현재 보드 상태를 복제해온다)
 		board.copyFromJudge(judge)
@@ -422,28 +433,46 @@ class MCSolver(connect4.BaseSolver):
 			##### multi threaded #####
 			print('phase 2 start')
 			processlist	= []
-			queuelist	= []
+			pipelist	= []
 
 			tree.weightedSearchProb = self.weightedSearchProb
 			tree.trycount = self.trycount
 
 			for tidx in range(self.threadcount):				# 쓰레드 수 만큼 반복
-				q		= multiprocessing.Queue()
-				p		= multiprocessing.Process(target=_tree_process, args=(tree, q, xgroup[tidx], ))
+				p_parent, p_child = multiprocessing.Pipe()
+				p		= multiprocessing.Process(target=_tree_process, args=(tree, p_child, xgroup[tidx], ))
 				p.start()
 				processlist.append(p)
-				queuelist.append(q)
+				pipelist.append(p_parent)
 
 			tree = None
 
-			for i in range(self.threadcount):					# 쓰레드 모두 끝날때까지 기다리기
-				treelist.append(queuelist[i].get())
-				processlist[i].join()
+			for i in range(self.threadcount):					# 각 프로세스에서 1차 결과 받아오기
+				treelist.append(pipelist[i].recv())
+				#processlist[i].join()
+
+			for phase in range(3, 20):
+				if time.time() - startTime >= 100:							# 추가 페이즈 실행중에 100초(1분 40초) 넘어가면 루프 종료
+					break
+
+				print('phase {} start'.format(phase))
+
+				tempsumlist = self._genSummaryFromNodeListList(treelist)	# 중간 결과 수집
+				for i in range(self.threadcount):							# 중간 결과를 다시 각 프로세스로 보내기
+					pipelist[i].send(tempsumlist)
+
+				for i in range(self.threadcount):							# 결과 받아오기
+					treelist[i] = pipelist[i].recv()
+
+
+			for i in range(self.threadcount):								# 종료하기
+				pipelist[i].send('halt')									# 메세지 보내기
+				processlist[i].join()										# 프로세스 종료 대기
 
 			processlist = None
 			queuelist	= None
 
-			print('phase over. synthesizing trees...')
+			print('synthesizing results from each processes...')
 			# 각 쓰레드에서 만든 트리 합성하기. 다음 페이즈 혹은 결과에 사용한다.
 			#tree	= MCSolver.Tree(originalTreeList=treelist)
 
@@ -468,29 +497,45 @@ class MCSolver(connect4.BaseSolver):
 
 
 # multiprocessing용
-def _tree_process(treeOriginal, outQueue, accentXList = []):
+def _tree_process(treeOriginal, pipe, accentXList = []):
 	tree = MCSolver.Tree(originalTreeList=[treeOriginal])  # 트리 복제하기
 	treeOriginal = None
 
-	_tree_accenting(tree, accentXList, tree.trycount)	# 지정한 X좌표에 충분히 포인트를 줘서 이쪽을 주로 search하도록...
+	##### phase 2 #####
 
-	tree.startSearch()  # 검색 시작
-
-	_tree_accenting(tree, accentXList, -tree.trycount)  # 포인트 다시 원상복구
-
+	_tree_accenting(tree, accentXList, tree.trycount * 2)	# 지정한 X좌표에 충분히 포인트를 줘서 이쪽을 주로 search하도록...
+	tree.startSearch()										# 검색 시작
+	_tree_accenting(tree, accentXList, -tree.trycount * 2)  # 포인트 다시 원상복구
 
 	# 빠른 트리 합성 사용 - root의 첫번째 자식들만 리턴한다.
-	childs = []
-	for x in range(_WIDTH):
-		key = 1 * _WIDTH + x
-		node = None
-		try:
-			node = tree.nodeDict[key]
-		except KeyError:
-			pass
-		childs.append(node)
+	childs = _tree_lv1nodelist(tree)
+	pipe.send(childs)
 
-	outQueue.put(childs)
+	##### phase 3~ #####
+
+	tree.trycount	= 4000		# 작은 단위로 계속 반복한다
+
+	while True:
+		sums = pipe.recv()
+		if sums == 'halt':		# 종료 메세지를 받았으면 루프 깨기
+			break
+
+		for sum in sums:		# 아니면 전달받은 정보를 트리에 적용해야한다
+			key = 1 * _WIDTH + sum['x']
+			try:
+				# 받아온 중간 결과를 각 노드에 직접 대입 (각 승리 횟수)
+				node = tree.nodeDict[key]
+				node.p1count = sum['p1count']
+				node.p2count = sum['p2count']
+			except KeyError:
+				pass
+
+		tree.startSearch()  # 다시 검색 시작
+
+		# 빠른 트리 합성 사용 - root의 첫번째 자식들만 리턴한다.
+		childs = _tree_lv1nodelist(tree)
+		pipe.send(childs)
+
 
 def _tree_accenting(tree, accentXList, amount):
 	for x in accentXList:		# 강조할 X 좌표 설정하기
@@ -502,3 +547,16 @@ def _tree_accenting(tree, accentXList, amount):
 			else:
 				node.p2count += amount
 			#print('accenting {} - {}/{}'.format(x, node.p1count, node.p2count))
+
+def _tree_lv1nodelist(tree):
+	childs = []
+	for x in range(_WIDTH):
+		key = 1 * _WIDTH + x
+		node = None
+		try:
+			node = tree.nodeDict[key]
+		except KeyError:
+			pass
+		childs.append(node)
+
+	return childs
