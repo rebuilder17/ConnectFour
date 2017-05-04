@@ -350,6 +350,42 @@ class MCSolver(connect4.BaseSolver):
 		self.threadcount		= threadcount					# 쓰레드 수
 		self.initialtrycount	= initialtrycount				# 1차 트리 계산시 시행 횟수
 
+	def _genSummaryFromNodes(self, nodes):
+		validnode	= None
+		p1c		= 0
+		p2c		= 0
+		for node in nodes:
+			if node:
+				validnode = node
+				p1c += node.p1count
+				p2c += node.p2count
+
+		csum	= max(1, p1c + p2c)
+		resultdict = {'x': validnode.x, 'y': validnode.y, 'p1prob': p1c / csum, 'p2prob': p2c / csum, 'p1count':p1c, 'p2count':p2c}
+
+		return resultdict
+
+	def _genSummaryFromTree(self, tree):
+		resultlist = []
+		for x in range(_WIDTH):  # x좌표 리스트를 뽑아본다
+			xkey = 1 * _WIDTH + x
+			summary = None
+			if xkey in tree.nodeDict:
+				node = tree.nodeDict[xkey]
+				summary = self._genSummaryFromNodes((node,))
+			resultlist.append(summary)
+
+		return resultlist
+
+	def _genSummaryFromNodeListList(self, nodell):
+		resultlist = []
+		for x in range(_WIDTH):
+			nodes = [l[x] for l in nodell]
+			summary = self._genSummaryFromNodes(nodes) if len(nodes) > 0 else None
+			resultlist.append(summary)
+
+		return resultlist
+
 	def nextMove(self, judge):
 		isP1	= judge.nextTurnIsP1()							# 검색을 시작하는 시점에서 누구 턴인지 판단
 		board	= MCSolver.Board()								# 보드 생성 (현재 보드 상태를 복제해온다)
@@ -370,19 +406,11 @@ class MCSolver(connect4.BaseSolver):
 			tree.startSearch()										# 계산 시작 (Single Threaded) - 초벌 서치?
 
 			# 미리 계산한 결과를 토대로 각 트리마다 분할 search을 시킬 준비를 한다.
-			xlist = []
-			for x in range(_WIDTH):										# x좌표 리스트를 뽑아본다
-				xkey = 1 * _WIDTH + x
-				if xkey in tree.nodeDict:
-					node = tree.nodeDict[xkey]
-					p1c = node.p1count
-					p2c = node.p2count
-					csum = max(1, p1c + p2c)
-					data = {'x' : x, 'p1prob' : p1c / csum}
-					xlist.append(data)
+			xlist = self._genSummaryFromTree(tree)							# level-1 노드 summary 긁어오기
 			xlist.sort(key=lambda item: item['p1prob'], reverse=not isP1)	# 현재 턴에 맞는 승률 낮은 쪽으로 정렬
 			#xexcCount	= len(xlist) // 2									# 예측 승률이 낮은 좌표 절반만큼을 고른다.
 			xgroupelemc = math.ceil(len(xlist) / self.threadcount)			# 각 x좌표 그룹마다 몇개씩 나눠넣어야할지
+			# NOTE : 실수로 승률 낮은쪽부터 정렬하긴 했는데, 이게 상관 있나
 
 			# 각 분할 search마다 주목해야할 x좌표 그룹 리스트
 			xgroup = [[d['x'] for d in xlist[i * xgroupelemc : (i + 1) * xgroupelemc]] for i in range(self.threadcount)]
@@ -421,38 +449,14 @@ class MCSolver(connect4.BaseSolver):
 
 
 		placelist	= []
-		for x in range(_WIDTH):									# 트리의 루트에서 각 x좌표마다 자식 노드가 있는지 검색해본다
+		if self.threadcount == 1:
+			placelist	= self._genSummaryFromTree(tree)
+		else:
+			placelist	= self._genSummaryFromNodeListList(treelist)
 
-			node = None
-			p1c = 0
-			p2c = 0
-			csum = None
-
-			if self.threadcount == 1:
-				xkey	= 1 * _WIDTH + x
-				if xkey in tree.nodeDict:							# 실제로는 dictionary에서 문자열 키로 검색
-					node	= tree.nodeDict[xkey]
-					p1c		= node.p1count
-					p2c		= node.p2count
-
-
-			else:
-				# 멀티코어 연산시 빠른 트리 합성 사용
-				for clist in treelist:
-					cnode = clist[x]
-					if cnode:
-						node = cnode
-						p1c += cnode.p1count
-						p2c += cnode.p2count
-
-			if node:
-				csum = max(1, p1c + p2c)
-				newplace = {'x': node.x, 'y': node.y, 'p1prob': p1c / csum, 'p2prob': p2c / csum}
-				print('({},{}) - p1c : {}, p2c : {}'.format(newplace['x'], newplace['y'], newplace['p1prob'],
-															newplace['p2prob']))
-				placelist.append(newplace)
-
-
+		for summary in placelist:
+			if summary:
+				print('({},{}) - p1c : {}, p2c : {}'.format(summary['x'], summary['y'], summary['p1prob'], summary['p2prob']))
 
 		placelist.sort(key=lambda item:item['p1prob'], reverse=isP1)	# 현재 턴에 맞는 승률 높은 쪽으로 정렬
 		choosen	= placelist[0]
