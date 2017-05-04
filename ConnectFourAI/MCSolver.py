@@ -153,14 +153,27 @@ class MCSolver(connect4.BaseSolver):
 						node = node.parent
 			
 			# 부모 노드까지 거슬러올라가면서 '무승부' 카운트
-			def propagateDrawCount(self):
+			def propagateDrawCount(self, starterIsP1):
 				node = self
 				add = 1
+				'''
 				while node:
 					node.p1count += add
 					node.p2count += add
-					#add += 1  # 먼 노드일 수록 결정에 더 영향을 미치도록
+					# add += 1  # 먼 노드일 수록 결정에 더 영향을 미치도록
 					node = node.parent
+				'''
+				if starterIsP1:	# TEST : 비기는 경우 처음 수를 둔 사람이 이기는 것처럼 취급해준다
+					while node:
+						node.p1count += add
+						#add += 1  # 먼 노드일 수록 결정에 더 영향을 미치도록
+						node = node.parent
+				else:
+					while node:
+						node.p2count += add
+						#add += 1  # 먼 노드일 수록 결정에 더 영향을 미치도록
+						node = node.parent
+				#'''
 
 			def createNextKey(self, x):
 				return self.key * _WIDTH + x
@@ -238,11 +251,12 @@ class MCSolver(connect4.BaseSolver):
 			random_choices	= random.choices
 			nodeDict		= self.nodeDict
 			weightedSearchProb	= self.weightedSearchProb
+			starterIsP1		= self.isP1Turn
 			##############################
 
 			for trycount in range(self.trycount):						# 지정한 횟수만큼 탐색을 반복한다.
 				node			= self.root
-				currentP1Turn	= self.isP1Turn
+				currentP1Turn	= starterIsP1
 
 				while node:												# 다음에 검색할 노드가 없을 때까지 반복
 					nextNode	= None
@@ -302,7 +316,7 @@ class MCSolver(connect4.BaseSolver):
 								try:											# 같은 키를 지닌 수가 이미 있다면 가져온다.
 									cached	= nodeDict[newKey]
 									if cached.finished:							# 승부가 이미 난 노드라면, 다시 한 번 승률 카운트를 해준다.
-										cached.propagateWinCount(self.isP1Turn)
+										cached.propagateWinCount(starterIsP1)
 										shouldBreak	= True						# x좌표를 새로 찾을 필요 없음. 다음 회차로 넘어가도록 한다
 									else:										# 승부가 안 난 경우엔 계속 검색
 										nextNode	= cached
@@ -312,9 +326,9 @@ class MCSolver(connect4.BaseSolver):
 									newNode.key				= newKey
 									nodeDict[newKey]		= newNode			# 캐싱하기
 
-									if not newNode.place(x, y, currentP1Turn, self.isP1Turn):	# 두었는데 승부가 나지 않았다면...
+									if not newNode.place(x, y, currentP1Turn, starterIsP1):	# 두었는데 승부가 나지 않았다면...
 										if newNode.board.boardFull():			# 만약 비긴 경우엔(보드꽉참) 비김 체크, 다음 회차로.
-											newNode.propagateDrawCount()
+											newNode.propagateDrawCount(starterIsP1)
 											shouldBreak		= True
 											#print('draw!')
 										else:									# 그 외의 경우엔 (게임 안끝남) 검색 계속
@@ -329,11 +343,12 @@ class MCSolver(connect4.BaseSolver):
 					currentP1Turn	= not currentP1Turn							# 턴이 넘어가므로 플래그 반전
 
 
-	def __init__(self, name, weightedSearchProb = 0.9, trycount = 10000, threadcount = 4):
+	def __init__(self, name, weightedSearchProb = 0.9, trycount = 10000, threadcount = 4, initialtrycount = 5000):
 		super().__init__(name)
 		self.weightedSearchProb	= weightedSearchProb			# 비중에 따른 서치를 얼마만큼 비율로 할지
 		self.trycount			= trycount						# 탐색 횟수
 		self.threadcount		= threadcount					# 쓰레드 수
+		self.initialtrycount	= initialtrycount				# 1차 트리 계산시 시행 횟수
 
 	def nextMove(self, judge):
 		isP1	= judge.nextTurnIsP1()							# 검색을 시작하는 시점에서 누구 턴인지 판단
@@ -350,7 +365,7 @@ class MCSolver(connect4.BaseSolver):
 
 		else:													# multithreaded
 			tree.weightedSearchProb	= 0
-			tree.trycount			= self.trycount // 10
+			tree.trycount			= self.initialtrycount
 			print('phase 1 start')
 			tree.startSearch()										# 계산 시작 (Single Threaded) - 초벌 서치?
 
@@ -366,11 +381,11 @@ class MCSolver(connect4.BaseSolver):
 					data = {'x' : x, 'p1prob' : p1c / csum}
 					xlist.append(data)
 			xlist.sort(key=lambda item: item['p1prob'], reverse=not isP1)	# 현재 턴에 맞는 승률 낮은 쪽으로 정렬
-			xexcCount	= len(xlist) // 2									# 예측 승률이 낮은 좌표 절반만큼을 고른다.
-			xgroupelemc = math.ceil(xexcCount / self.threadcount)			# 각 x좌표 그룹마다 몇개씩 나눠넣어야할지
+			#xexcCount	= len(xlist) // 2									# 예측 승률이 낮은 좌표 절반만큼을 고른다.
+			xgroupelemc = math.ceil(len(xlist) / self.threadcount)			# 각 x좌표 그룹마다 몇개씩 나눠넣어야할지
 
 			# 각 분할 search마다 주목해야할 x좌표 그룹 리스트
-			xgroup = [[d['x'] for d in xlist[:xexcCount][: i * xgroupelemc]] for i in range(self.threadcount)]
+			xgroup = [[d['x'] for d in xlist[i * xgroupelemc : (i + 1) * xgroupelemc]] for i in range(self.threadcount)]
 			#for i in range(self.threadcount):
 			#	print('xgroup {} : {}'.format(i + 1, xgroup[i]))
 
@@ -386,7 +401,7 @@ class MCSolver(connect4.BaseSolver):
 
 			for tidx in range(self.threadcount):				# 쓰레드 수 만큼 반복
 				q		= multiprocessing.Queue()
-				p		= multiprocessing.Process(target=_tree_process, args=(tree, q, ))
+				p		= multiprocessing.Process(target=_tree_process, args=(tree, q, xgroup[tidx], ))
 				p.start()
 				processlist.append(p)
 				queuelist.append(q)
@@ -449,15 +464,15 @@ class MCSolver(connect4.BaseSolver):
 
 
 # multiprocessing용
-def _tree_process(treeOriginal, outQueue, unimpXList = []):
+def _tree_process(treeOriginal, outQueue, accentXList = []):
 	tree = MCSolver.Tree(originalTreeList=[treeOriginal])  # 트리 복제하기
 	treeOriginal = None
 
-	_tree_accenting(tree, unimpXList, -tree.trycount)	# 지정한 X좌표에 충분히 포인트를 줘서 이쪽을 제외하고 search하도록...
+	_tree_accenting(tree, accentXList, tree.trycount)	# 지정한 X좌표에 충분히 포인트를 줘서 이쪽을 주로 search하도록...
 
 	tree.startSearch()  # 검색 시작
 
-	_tree_accenting(tree, unimpXList, tree.trycount)  # 포인트 다시 원상복구
+	_tree_accenting(tree, accentXList, -tree.trycount)  # 포인트 다시 원상복구
 
 
 	# 빠른 트리 합성 사용 - root의 첫번째 자식들만 리턴한다.
@@ -482,4 +497,4 @@ def _tree_accenting(tree, accentXList, amount):
 				node.p1count += amount
 			else:
 				node.p2count += amount
-			print('accenting {} - {}/{}'.format(x, node.p1count, node.p2count))
+			#print('accenting {} - {}/{}'.format(x, node.p1count, node.p2count))
