@@ -134,7 +134,7 @@ class MCSolver(connect4.BaseSolver):
 				node = self
 				
 				# 내가 이기는 경우, 먼 수일수록 영향력이 증대하도록.
-				add = 2
+				#add = 2
 				#addstep = 1
 
 				# 상대가 이기는 경우, 가까운 수일수록 영향력이 증대하도록.
@@ -144,19 +144,19 @@ class MCSolver(connect4.BaseSolver):
 
 				if self.finisherIsP1:
 					while node:
-						node.p1count += add
+						node.p1count += 2
 						#add += addstep		# 먼 노드일 수록 결정에 더 영향을 미치도록
 						node = node.parent
 				else:
 					while node:
-						node.p2count += add
+						node.p2count += 2
 						#add += addstep  # 먼 노드일 수록 결정에 더 영향을 미치도록
 						node = node.parent
 			
 			# 부모 노드까지 거슬러올라가면서 '무승부' 카운트
 			def propagateDrawCount(self, starterIsP1):
 				node = self
-				add = 1
+				#add = 1
 				'''
 				while node:
 					node.p1count += add
@@ -166,12 +166,14 @@ class MCSolver(connect4.BaseSolver):
 				'''
 				if starterIsP1:	# TEST : 비기는 경우 처음 수를 둔 사람이 이기는 것처럼 취급해준다
 					while node:
-						node.p1count += add
+						node.p1count += 2
+						node.p2count += 1
 						#add += 1  # 먼 노드일 수록 결정에 더 영향을 미치도록
 						node = node.parent
 				else:
 					while node:
-						node.p2count += add
+						node.p2count += 2
+						node.p1count += 1
 						#add += 1  # 먼 노드일 수록 결정에 더 영향을 미치도록
 						node = node.parent
 				#'''
@@ -280,10 +282,20 @@ class MCSolver(connect4.BaseSolver):
 							try:
 								pick	= nodeDict[newKey]
 								# p1차례면 p1에게 유리한 쪽으로, p2차례면 p2에게 유리한 쪽으로 weight를 준다. (wsign)
-								xweight[x] = (pick.p1count - pick.p2count) * wsign
+								p1c = pick.p1count
+								p2c = pick.p2count
+								psum = p1c + p2c
+								'''
+								w = (p1c - p2c) * wsign / (p1c + p2c)
+								w = w ** (1/3) if w > 0 else -((-w) ** (1/3))
+								xweight[x] = max(0.000001, w + 1) # 최소값이 0이 되지는 않도록
+								'''
+								w = (p1c - p2c) * wsign
+								xweight[x] = w
 							except KeyError:
 								pass
 
+						#'''
 						minw	= min(xweight) - 1
 						#if minw < 0:									# weight 최소값이 1이 되도록 맞춰준다. (0, 음수값 weight 방지)
 						for x in range(width):
@@ -291,9 +303,11 @@ class MCSolver(connect4.BaseSolver):
 							w -= minw
 							#w = math.pow(w, 1.5)
 							#w *= w
-							xweight[x] = w
+							xweight[x] = w ** 2
+						#'''
 
-						'''
+
+						#'''
 						xlist	= []
 						for i in range(width):
 							pick	= random_choices(indexes, xweight)[0]
@@ -302,7 +316,7 @@ class MCSolver(connect4.BaseSolver):
 						'''
 						xlist	= [x for x in range(_WIDTH)]
 						xlist.sort(key=lambda i: xweight[i], reverse=True)	# 확률이 아닌 확정 내림차순
-						#'''
+						'''
 
 						#print("weights:{}, xlist:{}".format(str(xweight), str(xlist)))
 
@@ -327,13 +341,16 @@ class MCSolver(connect4.BaseSolver):
 										shouldBreak	= True						# x좌표를 새로 찾을 필요 없음. 다음 회차로 넘어가도록 한다
 										# TEST : 승리 카운트를 하지 않고 다른 X 좌표를 찾도록 해본다
 										#pass
+									elif cached.board.boardFull():				# 혹은, 보드가 꽉찬 경우엔 다시 한 번 비김 처리
+										cached.propagateDrawCount(starterIsP1)
+										shouldBreak = True						# x좌표를 새로 찾을 필요 없음. 다음 회차로 넘어가도록 한다
 									else:										# 승부가 안 난 경우엔 계속 검색
 										nextNode	= cached
 								#else:
 								except KeyError:								# 새로운 수일 경우, 새로 노드를 만들어야함
 									newNode					= MCSolver.Tree.Node(node)
 									newNode.key				= newKey
-									nodeDict[newKey]		= newNode			# 캐싱하기
+									nodeDict[newKey]		= newNode			# dictionary에 노드 등록
 
 									if not newNode.place(x, y, currentP1Turn, starterIsP1):	# 두었는데 승부가 나지 않았다면...
 										if newNode.board.boardFull():			# 만약 비긴 경우엔(보드꽉참) 비김 체크, 다음 회차로.
@@ -363,11 +380,17 @@ class MCSolver(connect4.BaseSolver):
 		validnode	= None
 		p1c		= 0
 		p2c		= 0
+		vncount	= 0
 		for node in nodes:			# Node들을 하나로 합성한다.
 			if node:
+				vncount += 1
 				validnode = node
 				p1c += node.p1count
 				p2c += node.p2count
+
+		if vncount > 0:
+			p1c = p1c // vncount	# 숫자가 너무 커지는 것을 방지한다.
+			p2c = p2c // vncount
 
 		csum	= max(1, p1c + p2c)
 		resultdict = {'key':validnode.key, 'x': validnode.x, 'y': validnode.y, 'p1prob': p1c / csum, 'p2prob': p2c / csum, 'p1count':p1c, 'p2count':p2c}
@@ -554,6 +577,9 @@ def _tree_process(treeOriginal, pipe, accentXList = []):
 
 	##### phase 2 #####
 
+	#origwsp = tree.weightedSearchProb
+	#tree.weightedSearchProb = 1	# 항상 wegited search 하도록
+
 	_tree_accenting(tree, accentXList, tree.trycount * 2)	# 지정한 X좌표에 충분히 포인트를 줘서 이쪽을 주로 search하도록...
 	tree.startSearch()										# 검색 시작
 	_tree_accenting(tree, accentXList, -tree.trycount * 2)  # 포인트 다시 원상복구
@@ -566,6 +592,7 @@ def _tree_process(treeOriginal, pipe, accentXList = []):
 	##### phase 3~ #####
 
 	tree.trycount	= 4000		# 작은 단위로 계속 반복한다
+	#tree.weightedSearchProb = origwsp	# 원래 설정한 wegithed search 확률 적용
 
 	while True:
 		sums = pipe.recv()
@@ -615,7 +642,7 @@ def _tree_lv1nodelist(tree):
 
 	return childs
 
-def _tree_extranodelist(tree, iter = 3):
+def _tree_extranodelist(tree, iter = 4):
 	nodelist = []
 	_tree_extranodelist_iter(tree, nodelist, 1, iter)
 	return nodelist
