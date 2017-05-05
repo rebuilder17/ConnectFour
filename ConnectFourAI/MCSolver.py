@@ -290,14 +290,19 @@ class MCSolver(connect4.BaseSolver):
 							w = xweight[x]
 							w -= minw
 							#w = math.pow(w, 1.5)
-							w *= w
+							#w *= w
 							xweight[x] = w
 
+						'''
 						xlist	= []
 						for i in range(width):
 							pick	= random_choices(indexes, xweight)[0]
 							xweight[pick] = 0		# weight를 0으로 둬서 픽되지 않게 한다
 							xlist.append(pick)
+						'''
+						xlist	= [x for x in range(_WIDTH)]
+						xlist.sort(key=lambda i: xweight[i], reverse=True)	# 확률이 아닌 확정 내림차순
+						#'''
 
 						#print("weights:{}, xlist:{}".format(str(xweight), str(xlist)))
 
@@ -358,14 +363,14 @@ class MCSolver(connect4.BaseSolver):
 		validnode	= None
 		p1c		= 0
 		p2c		= 0
-		for node in nodes:
+		for node in nodes:			# Node들을 하나로 합성한다.
 			if node:
 				validnode = node
 				p1c += node.p1count
 				p2c += node.p2count
 
 		csum	= max(1, p1c + p2c)
-		resultdict = {'x': validnode.x, 'y': validnode.y, 'p1prob': p1c / csum, 'p2prob': p2c / csum, 'p1count':p1c, 'p2count':p2c}
+		resultdict = {'key':validnode.key, 'x': validnode.x, 'y': validnode.y, 'p1prob': p1c / csum, 'p2prob': p2c / csum, 'p1count':p1c, 'p2count':p2c}
 
 		return resultdict
 
@@ -395,6 +400,21 @@ class MCSolver(connect4.BaseSolver):
 
 		return resultlist
 
+	def _genSummaryFromProcessNodeList(self, nodelist):
+		tempdict = {}
+		for node in nodelist:	# nodelist에서 같은 key값을 갖는 node들의 list를 key값으로 매칭한 딕셔너리를 만든다.
+			if node.key in tempdict:
+				tempdict[node.key].append(node)
+			else:
+				tempdict[node.key] = [node]
+
+		resultlist = []
+		for key in tempdict:
+			nodelist = tempdict[key]
+			resultlist.append(self._genSummaryFromNodes(nodelist))	# 각 같은 키값의 노드들을 하나로 합성한다.
+
+		return resultlist
+
 	def nextMove(self, judge):
 		startTime	= time.time()
 
@@ -403,7 +423,8 @@ class MCSolver(connect4.BaseSolver):
 		board.copyFromJudge(judge)
 
 		tree					= MCSolver.Tree(board, isP1)	# 검색용 트리 생성
-		treelist				= []
+		#treelist				= []
+		nodelist				= None
 
 		if self.threadcount == 1:								# single threaded
 			tree.weightedSearchProb = self.weightedSearchProb
@@ -434,6 +455,7 @@ class MCSolver(connect4.BaseSolver):
 			print('phase 2 start')
 			processlist	= []
 			pipelist	= []
+			nodelist	= []
 
 			tree.weightedSearchProb = self.weightedSearchProb
 			tree.trycount = self.trycount
@@ -448,8 +470,9 @@ class MCSolver(connect4.BaseSolver):
 			tree = None
 
 			for i in range(self.threadcount):					# 각 프로세스에서 1차 결과 받아오기
-				treelist.append(pipelist[i].recv())
+				#treelist.append(pipelist[i].recv())
 				#processlist[i].join()
+				nodelist += pipelist[i].recv()
 
 			for phase in range(3, 20):
 				if time.time() - startTime >= 100:							# 추가 페이즈 실행중에 100초(1분 40초) 넘어가면 루프 종료
@@ -457,12 +480,27 @@ class MCSolver(connect4.BaseSolver):
 
 				print('phase {} start'.format(phase))
 
-				tempsumlist = self._genSummaryFromNodeListList(treelist)	# 중간 결과 수집
+				#tempsumlist = self._genSummaryFromNodeListList(treelist)	# 중간 결과 수집
+				tempsumlist = self._genSummaryFromProcessNodeList(nodelist)  # 중간 결과 수집
+
+				'''
+				# tree 합성 현황 로그
+				for sum in tempsumlist:
+					key = sum['key']
+					xpath = []
+					while key > 1:
+						xpath.append(key % _WIDTH)
+						key = key // _WIDTH
+					xpath.reverse()
+					print ('path : {}, x : {}, y : {}, p1count : {}, p2count : {}'.format(xpath, sum['x'], sum['y'], sum['p1count'], sum['p2count']))
+				'''
+
 				for i in range(self.threadcount):							# 중간 결과를 다시 각 프로세스로 보내기
 					pipelist[i].send(tempsumlist)
 
+				nodelist = []
 				for i in range(self.threadcount):							# 결과 받아오기
-					treelist[i] = pipelist[i].recv()
+					nodelist += pipelist[i].recv()
 
 
 			for i in range(self.threadcount):								# 종료하기
@@ -481,7 +519,20 @@ class MCSolver(connect4.BaseSolver):
 		if self.threadcount == 1:
 			placelist	= self._genSummaryFromTree(tree)
 		else:
-			placelist	= self._genSummaryFromNodeListList(treelist)
+			tempsumlist = self._genSummaryFromProcessNodeList(nodelist)
+			#placelist	= self._genSummaryFromNodeListList(treelist)
+			tempdict = {}
+			for sum in tempsumlist:				# summary 리스트에서 1level 노드 것들만 뽑아온다
+				if sum['key'] // _WIDTH == 1:
+					tempdict[sum['x']] = sum
+
+			for x in range(_WIDTH):				# 1차원 리스트에 인덱스=x좌표값 형태로 정렬한다.
+				try:
+					sum = tempdict[x]
+					placelist.append(sum)
+				except KeyError:
+					pass
+			
 
 		for summary in placelist:
 			if summary:
@@ -507,9 +558,10 @@ def _tree_process(treeOriginal, pipe, accentXList = []):
 	tree.startSearch()										# 검색 시작
 	_tree_accenting(tree, accentXList, -tree.trycount * 2)  # 포인트 다시 원상복구
 
-	# 빠른 트리 합성 사용 - root의 첫번째 자식들만 리턴한다.
-	childs = _tree_lv1nodelist(tree)
-	pipe.send(childs)
+	# 빠른 트리 합성 사용 - 기본값으로 level-3까지의 자식 노드만 정보를 보낸다
+	# childs = _tree_lv1nodelist(tree)
+	# pipe.send(childs)
+	pipe.send(_tree_extranodelist(tree))
 
 	##### phase 3~ #####
 
@@ -521,7 +573,7 @@ def _tree_process(treeOriginal, pipe, accentXList = []):
 			break
 
 		for sum in sums:		# 아니면 전달받은 정보를 트리에 적용해야한다
-			key = 1 * _WIDTH + sum['x']
+			key = sum['key']
 			try:
 				# 받아온 중간 결과를 각 노드에 직접 대입 (각 승리 횟수)
 				node = tree.nodeDict[key]
@@ -530,11 +582,13 @@ def _tree_process(treeOriginal, pipe, accentXList = []):
 			except KeyError:
 				pass
 
+		sums =  None
 		tree.startSearch()  # 다시 검색 시작
 
-		# 빠른 트리 합성 사용 - root의 첫번째 자식들만 리턴한다.
-		childs = _tree_lv1nodelist(tree)
-		pipe.send(childs)
+		# 빠른 트리 합성 사용 - 기본값으로 level-3까지의 자식 노드만 정보를 보낸다
+		#childs = _tree_lv1nodelist(tree)
+		#pipe.send(childs)
+		pipe.send(_tree_extranodelist(tree))
 
 
 def _tree_accenting(tree, accentXList, amount):
@@ -560,3 +614,21 @@ def _tree_lv1nodelist(tree):
 		childs.append(node)
 
 	return childs
+
+def _tree_extranodelist(tree, iter = 3):
+	nodelist = []
+	_tree_extranodelist_iter(tree, nodelist, 1, iter)
+	return nodelist
+
+def _tree_extranodelist_iter(tree, nodelist, prevkey, iter):
+	for x in range(_WIDTH):
+		key = prevkey * _WIDTH + x
+
+		try:
+			node = tree.nodeDict[key]
+			nodelist.append(node)
+		except KeyError:
+			pass
+
+		if iter > 1:
+			_tree_extranodelist_iter(tree, nodelist, key, iter - 1)
