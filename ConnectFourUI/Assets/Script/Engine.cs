@@ -48,9 +48,10 @@ public class Engine : MonoBehaviour
 	
 	private void Awake()
 	{
+		Application.targetFrameRate	= 60;
+		QualitySettings.vSyncCount	= 1;
+
 		m_state			= State.Ready;
-
-
 	}
 
 	private IEnumerator Start()
@@ -152,6 +153,7 @@ public class Engine : MonoBehaviour
 		while (!m_gameStateCtrl.waitingForInput)				// 입력 기다리는 상태가 될 때까지 대기한다
 			yield return null;
 
+		//Debug.Log("waiting for input passed");
 		m_gameStateCtrl.InputSolverIndex(c_solverIndex_Human);	// 사람 입력을 받는 걸로 모듈쪽에 전송
 
 		var ui				= OverlayUI.instance;

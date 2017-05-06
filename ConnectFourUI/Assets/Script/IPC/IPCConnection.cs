@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.ComponentModel;
 using System.IO;
 using System.Threading;
+using UnityEngine;
 
 public class IPCConnection
 {
@@ -150,6 +151,13 @@ public class IPCConnection
 		startInfo.RedirectStandardOutput	= true;
 		startInfo.RedirectStandardError		= true;
 		startInfo.CreateNoWindow			= true;
+
+		if (!Application.isEditor)			// FIX : Editor 안쪽에 있을때랑 바깥이랑 인코딩이 다르다.
+		{
+			var euckr	= System.Text.Encoding.GetEncoding("euc-kr");
+			startInfo.StandardOutputEncoding	= euckr;
+			startInfo.StandardErrorEncoding		= euckr;
+		}
 
 		m_targetProcess.StartInfo			= startInfo;
 

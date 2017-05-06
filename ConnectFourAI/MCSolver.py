@@ -157,10 +157,11 @@ class MCSolver(connect4.BaseSolver):
 			def propagateDrawCount(self, starterIsP1):
 				node = self
 				#add = 1
-				'''
+				#'''
 				while node:
-					node.p1count += add
-					node.p2count += add
+					#node.p1count += 1
+					# NOTE : 무승부 상황은 플레이어2에게 유리한 것으로 판단한다.
+					node.p2count += 1
 					# add += 1  # 먼 노드일 수록 결정에 더 영향을 미치도록
 					node = node.parent
 				'''
@@ -176,7 +177,7 @@ class MCSolver(connect4.BaseSolver):
 						node.p1count += 1
 						#add += 1  # 먼 노드일 수록 결정에 더 영향을 미치도록
 						node = node.parent
-				#'''
+				'''
 
 			def createNextKey(self, x):
 				return self.key * _WIDTH + x
@@ -269,7 +270,7 @@ class MCSolver(connect4.BaseSolver):
 					# cacheing
 					node_createNextKey	= node.createNextKey
 
-					if random_random() >= weightedSearchProb:			# *** 일정 확률로 동일하게 랜덤으로 찾는다.
+					if starterIsP1 == currentP1Turn and random_random() >= weightedSearchProb:			# *** 일정 확률로 동일하게 랜덤으로 찾는다.
 						random_shuffle(shuffledIdx)
 						xlist	= shuffledIdx
 					else:												# *** 나머지 확률로 weight를 따진다.
@@ -497,14 +498,56 @@ class MCSolver(connect4.BaseSolver):
 				#processlist[i].join()
 				nodelist += pipelist[i].recv()
 
+			tempsumlist = None
+			chistory = [1.0]
+
+			print('extra phase (3 ~ ) start')
+
 			for phase in range(3, 20):
 				if time.time() - startTime >= 100:							# 추가 페이즈 실행중에 100초(1분 40초) 넘어가면 루프 종료
 					break
 
-				print('phase {} start'.format(phase))
+				oldtsumlist = None
+				if tempsumlist:												# 이전 중간결과가 있다면 백업
+					oldtsumlist = tempsumlist
 
 				#tempsumlist = self._genSummaryFromNodeListList(treelist)	# 중간 결과 수집
 				tempsumlist = self._genSummaryFromProcessNodeList(nodelist)  # 중간 결과 수집
+
+				if oldtsumlist:												# 이전 중간결과와 비교
+					sumpairdict = {}
+					for oldsum in oldtsumlist:
+						key = oldsum['key']
+						if key // _WIDTH == 1:	# level-1만 취급
+							sumpairdict[oldsum['key']] = [oldsum, None]
+
+					for newsum in tempsumlist:
+						key = newsum['key']
+						if key in sumpairdict:
+							sumpairdict[key][1] = newsum
+
+					changes = []
+					for key in sumpairdict:
+						pair = sumpairdict[key]
+						old = pair[0]
+						new = pair[1]
+						if old and new:
+							changes.append(math.fabs(old['p1prob'] - new['p1prob']))
+
+					changecnt = len(changes)
+					if changecnt > 0:
+						sum = 0
+						for c in changes:
+							sum += c
+						avg = sum / changecnt
+						print('(평균 승률 변화 P : {})'.format(avg))
+
+						chistory.append(avg)
+
+						if max(chistory[-2:]) < 0.001:	# 마지막 두 변화률이 일정 수치 이하면 안정화된 것으로 본다
+							print('승률 안정화된 것으로 추정, 계산 종료')
+							break
+
 
 				'''
 				# tree 합성 현황 로그

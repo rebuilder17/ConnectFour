@@ -24,5 +24,6 @@ def sendMessage(msg):
 
 def receive():
 	line	= sys.stdin.readline()
+	#_printToStd("receive() : {}".format(line))
 	return line.rstrip() if line else line
 

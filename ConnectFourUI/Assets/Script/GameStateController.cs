@@ -213,6 +213,7 @@ public class GameStateController : MonoBehaviour
 			
 			if (message.header == IPCConnection.Message.Header.Await)	// 입력 기다리는 경우 - solver index임!
 			{
+				//Debug.Log("Solver index await");
 				m_state				= State.SelectSolver;
 				m_waitForInput		= true;
 
@@ -258,7 +259,7 @@ public class GameStateController : MonoBehaviour
 				m_state				= State.SelectSolver;
 				m_waitForInput		= true;
 
-				Debug.Log("waiting for input : " + m_requestedInput);
+				//Debug.Log("waiting for input : " + m_requestedInput);
 
 				while (m_waitForInput)									// 입력 해결될 때까지 기다린다.
 					yield return null;

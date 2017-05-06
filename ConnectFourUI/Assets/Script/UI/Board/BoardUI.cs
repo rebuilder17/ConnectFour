@@ -34,6 +34,7 @@ public class BoardUI : MonoBehaviour
 	// Members
 
 	BoardStone []		m_stoneObjs;			// 돌 객체 배열
+	BoardStone			m_highlightedStone;		// 강조표시되었던 돌
 	System.Action<int>	m_inputCallback;		// 라인 선택시 콜백
 
 
@@ -119,6 +120,7 @@ public class BoardUI : MonoBehaviour
 		if (lastMove != null)
 		{
 			ShowStatus(lastMove);				// 상태 표시하기
+			SetHighlight(GetStoneAtPos(lastMove.x, lastMove.y));	// 하이라이트 표시
 		}
 		else
 		{
@@ -135,9 +137,11 @@ public class BoardUI : MonoBehaviour
 		var colorPreset	= newMove.who == GameState.PlayerTurn.One ?
 															BoardStone.ColorPreset.Player1
 														:	BoardStone.ColorPreset.Player2;
-		GetStoneAtPos(newMove.x, newMove.y).Show(colorPreset, true);
+		var stone	= GetStoneAtPos(newMove.x, newMove.y);
+		stone.Show(colorPreset, true);									// 돌 표시
+		ShowStatus(newMove);											// 상태 표시하기
 
-		ShowStatus(newMove);				// 상태 표시하기
+		SetHighlight(stone);											// 마지막에 둔 돌이므로 하이라이트 표시
 	}
 
 	BoardStone GetStoneAtPos(int x, int y)
@@ -159,6 +163,14 @@ public class BoardUI : MonoBehaviour
 		m_statusStone.color		= BoardStone.GetColorFromPreset(player);
 		m_statusPosition.text	= string.Format("({0},{1})", move.x + 1, move.y + 1);
 		m_statusComment.text	= move.comment;
+	}
+
+	void SetHighlight(BoardStone stone)
+	{
+		if (m_highlightedStone != null)
+			m_highlightedStone.HideBackEffect();
+		m_highlightedStone = stone;
+		stone.ShowBackEffect();
 	}
 
 

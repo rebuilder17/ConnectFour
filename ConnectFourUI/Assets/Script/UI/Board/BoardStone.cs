@@ -30,6 +30,8 @@ public class BoardStone : MonoBehaviour
 
 	[SerializeField]
 	Image			m_image;					// 실제로 이미지 표시하는데 사용할 Image 객체
+	[SerializeField]
+	Image			m_imageBack;
 
 
 
@@ -37,6 +39,7 @@ public class BoardStone : MonoBehaviour
 
 	RectTransform	m_imageTr;
 	Coroutine		m_animCo;
+	Coroutine		m_backAnimCo;
 
 
 	private void Awake()
@@ -81,6 +84,8 @@ public class BoardStone : MonoBehaviour
 			m_animCo	= null;
 			finalSetFunc();
 		}
+
+		HideBackEffect();
 	}
 
 	/// <summary>
@@ -89,5 +94,48 @@ public class BoardStone : MonoBehaviour
 	public void Hide()
 	{
 		m_image.enabled	= false;			// 우선은 그냥 비활성화만...
+		HideBackEffect();
+	}
+
+	/// <summary>
+	/// 뒤쪽 하이라이트 이펙트 켜기
+	/// </summary>
+	public void ShowBackEffect()
+	{
+		HideBackEffect();
+		
+		m_backAnimCo = StartCoroutine(co_backAnimCo());
+	}
+
+	IEnumerator co_backAnimCo()
+	{
+		yield return new WaitForSeconds(0.2f);
+
+		m_imageBack.enabled	= true;
+		var startTime	= Time.time;
+		var interval	= 1f;
+		while(true)
+		{
+			var elapsed	= Time.time - startTime;
+			var t		= (-Mathf.Cos(elapsed * interval * 2 * Mathf.PI) + 1) * 0.5f;
+
+			var color	= m_imageBack.color;
+			color.a		= t * 0.3f;
+			m_imageBack.color = color;
+
+			yield return null;
+		}
+	}
+
+	/// <summary>
+	/// 뒤쪽 하이라이트 이펙트 끄기
+	/// </summary>
+	public void HideBackEffect()
+	{
+		if (m_backAnimCo != null)
+			StopCoroutine(m_backAnimCo);
+		m_backAnimCo = null;
+
+		m_imageBack.enabled	= false;
 	}
 }
