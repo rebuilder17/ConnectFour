@@ -173,10 +173,10 @@ public class Engine : MonoBehaviour
 	/// </summary>
 	void SetForRuleSolving()
 	{
-		StartCoroutine(co_setForSolverWaiting(c_solverIndex_Rule));
+		StartCoroutine(co_setForSolverWaiting(c_solverIndex_Rule, false));
 	}
 
-	IEnumerator co_setForSolverWaiting(int solverIndex)
+	IEnumerator co_setForSolverWaiting(int solverIndex, bool showWaitingDialog = true)
 	{
 		yield return null;
 
@@ -186,7 +186,10 @@ public class Engine : MonoBehaviour
 		m_state = State.Solving;								// 솔버 응답 기다리는 상태로
 
 		m_gameStateCtrl.InputSolverIndex(solverIndex);
-		OverlayUI.instance.OpenDialog<WaitingDialog>();
+		if (showWaitingDialog)
+		{
+			OverlayUI.instance.OpenDialog<WaitingDialog>();
+		}
 	}
 
 	/// <summary>
@@ -194,7 +197,16 @@ public class Engine : MonoBehaviour
 	/// </summary>
 	void PromptForSolverSelect()
 	{
+		StartCoroutine(co_solverSelect());
+	}
+
+	IEnumerator co_solverSelect()
+	{
 		var ui		= OverlayUI.instance;
+		var waitdlg	= ui.GetDialog<WaitingDialog>();
+		while (waitdlg.IsOpened)						// "계산중" 다이얼로그가 닫힐 때까지 대기한다.
+			yield return null;
+
 		ui.GetDialog<SolverSelectDialog>().Setup(m_gameState, SetForHumanInput, SetForSearchSolving, SetForRuleSolving);
 		ui.OpenDialog<SolverSelectDialog>();
 	}
