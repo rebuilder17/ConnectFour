@@ -6,6 +6,7 @@ if __name__ == '__main__':
 	import connect4
 	import ipcutils
 	from MCSolver import *
+	from RuleSolver import *
 
 
 	judge = connect4.Judge()
@@ -13,10 +14,12 @@ if __name__ == '__main__':
 	# player1
 	judge.addPlayer1Solver(connect4.HumanSolver('P1 HumanSolver'))
 	judge.addPlayer1Solver(MCSolver('P1 MCSolver v4', 0.9, 20000, threadcount=8, initialtrycount=8000))
+	judge.addPlayer1Solver(RuleSolver('P1 RuleSolver'))
 
 	# player2
 	judge.addPlayer2Solver(connect4.HumanSolver('P2 HumanSolver'))
 	judge.addPlayer2Solver(MCSolver('P2 MCSolver v4', 0.9, 20000, threadcount=8, initialtrycount=8000))
+	judge.addPlayer2Solver(RuleSolver('P2 RuleSolver'))
 
 	# output
 	judge.setJudgeOutput(connect4.SimpleJudgeOutput())
