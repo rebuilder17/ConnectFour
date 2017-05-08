@@ -130,7 +130,7 @@ class RuleSolver(connect4.BaseSolver):
             self.foeMoveType = 3 - self.moveType
 
         ## 아래의 점수판에서, 10은 기초 값을 의미합니다; None과 int값은 비교할 수 없기에 이 값을 넣었습니다.
-        scoreboard = [[10 for j in range(self.BOARD_HEIGHT)] for i in range(self.BOARD_WIDTH)]
+        scoreboard = [[11 for j in range(self.BOARD_HEIGHT)] for i in range(self.BOARD_WIDTH)]
         ## 아래의 어디에 놓을 수 있을까, 하는 것에서는
         possiblePlaceOn  = [9 for i in range(self.BOARD_WIDTH)]
 
@@ -147,7 +147,7 @@ class RuleSolver(connect4.BaseSolver):
             possiblePlaceOn[x] = min(buffer)  # 리스트 중 가장 작은 값으로 업데이트
 
         ## 아래의 메소드는 확인을 위해 Rule들의 값을 불러온다.
-#        self.printScoreboard(scoreboard)
+        self.printScoreboard(scoreboard)
 #        print('\nPossible Places\n {}  {}  {}  {}  {}  {}  {}' .format(possiblePlaceOn[0], possiblePlaceOn[1], possiblePlaceOn[2],
 #                                                                possiblePlaceOn[3], possiblePlaceOn[4], possiblePlaceOn[5],
 #                                                                possiblePlaceOn[6]))
@@ -160,9 +160,9 @@ class RuleSolver(connect4.BaseSolver):
             if possiblePlaceOn[x] < 7:
                 pnt = scoreboard[x][possiblePlaceOn[x]]
                 pnt_above = scoreboard[x][possiblePlaceOn[x] + 1] if possiblePlaceOn[x] < 5 else 9
-                candidates.append(9 if pnt in [5, 6, 7, 8] and pnt_above in [3, 4] else pnt )
+                candidates.append(10 if pnt in [5, 6, 7, 8] and pnt_above in [2, 3, 4] else pnt )
             else:
-                candidates.append(10)
+                candidates.append(11)
 
 #        print('\nCandidates\n {}  {}  {}  {}  {}  {}  {}' .format(candidates[0], candidates[1], candidates[2],
 #                                                                candidates[3], candidates[4], candidates[5],
@@ -172,7 +172,7 @@ class RuleSolver(connect4.BaseSolver):
 
         if min(candidates) == 1:
             return 3, possiblePlaceOn[3], 'Rule 1 적용'
-        elif min(candidates) == 10:
+        elif min(candidates) == 11:
             if judge.getTurn() == 0:
                 return 3, 0, 'Rule 1 적용'
             else:
