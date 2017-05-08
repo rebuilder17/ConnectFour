@@ -79,7 +79,8 @@ class MCSolver(connect4.BaseSolver):
 
 	class Tree:
 		class Node:
-			__slots__ = ['parent', 'board', 'key', 'p1count', 'p2count', 'x', 'y', 'finished', 'finisherIsP1']
+			#__slots__ = ['parent', 'board', 'key', 'p1count', 'p2count', 'x', 'y', 'finished', 'finisherIsP1']
+			__slots__ = ['parent', 'board', 'key', 'p1count', 'p2count', 'x', 'y', 'finisherIsP1']
 
 			def __init__(self, parent=None, copyFrom=None):
 				if copyFrom:			# 다른 노드의 복제본을 만드는 경우. (Tree끼리 합성할 때)
@@ -91,7 +92,7 @@ class MCSolver(connect4.BaseSolver):
 					self.p2count	= copyFrom.p2count
 					self.x			= copyFrom.x
 					self.y			= copyFrom.y
-					self.finished	= copyFrom.finished
+					#self.finished	= copyFrom.finished
 					self.finisherIsP1 = copyFrom.finisherIsP1
 
 				else:					# 새로 노드를 만들거나, parent 지정하는 경우 (검색중)
@@ -113,7 +114,7 @@ class MCSolver(connect4.BaseSolver):
 
 					self.x				= None
 					self.y				= None
-					self.finished		= False
+					#self.finished		= False
 					self.finisherIsP1	= None
 
 			# 승부가 났으면 True 아니면 False
@@ -123,7 +124,7 @@ class MCSolver(connect4.BaseSolver):
 				self.y = y
 
 				if self.board.placeAndCheck(x, y, isP1):
-					self.finished		= True
+					#self.finished		= True
 					self.finisherIsP1	= isP1
 					self.propagateWinCount(starterIsP1)
 					return True
@@ -259,13 +260,24 @@ class MCSolver(connect4.BaseSolver):
 			forceEqualWeight= weightedSearchProb == 0
 			##############################
 
+			exhaustedKey = set()  # 검색을 끝낸 key 목록
+
 			for trycount in range(self.trycount):						# 지정한 횟수만큼 탐색을 반복한다.
 				node			= self.root
 				currentP1Turn	= starterIsP1
+				searchLimit		= 0
+
+				useExpansionSearch = random_random() < 0.4  # 일정 확률로 이미 탐색한 노드를 피해서 검색하는 방법을 쓴다.
 
 				while node:												# 다음에 검색할 노드가 없을 때까지 반복
+					if searchLimit > 100:
+						#print('node search limit reached!')
+						break
+					searchLimit += 1
+
 					nextNode	= None
 					shouldBreak	= False
+					forceExhaustX = False	# 강제로 x좌표 리스트를 전부 사용한 것처럼 취급, shouldBreak하고는 사용처가 다름
 					xlist		= None
 
 					# cacheing
@@ -305,8 +317,8 @@ class MCSolver(connect4.BaseSolver):
 							w -= minw
 							#w = math.pow(w, 1.5)
 							#w *= w
-							#xweight[x] = w ** 2
-							xweight[x] = w
+							xweight[x] = w ** 2
+							#xweight[x] = w
 						#'''
 
 
@@ -316,9 +328,10 @@ class MCSolver(connect4.BaseSolver):
 							pick	= random_choices(indexes, xweight)[0]
 							xweight[pick] = 0		# weight를 0으로 둬서 픽되지 않게 한다
 							xlist.append(pick)
+
 						'''
 						xlist	= [x for x in range(_WIDTH)]
-						xlist.sort(key=lambda i: xweight[i], reverse=True)	# 확률이 아닌 확정 내림차순
+						xlist.sort(key=lambda i: xweight[i], reverse=True)
 						'''
 
 						#print("weights:{}, xlist:{}".format(str(xweight), str(xlist)))
@@ -327,17 +340,25 @@ class MCSolver(connect4.BaseSolver):
 					for x in xlist:
 						if nextNode:											# 다음 턴을 진행할 노드를 찾았다면 x좌표 찾는 루프를 빠져나온다.
 							break
-						if shouldBreak:											# 루프를 깨야하는 경우 (승부가 난 경우)
+						if shouldBreak:											# 루프를 깨야하는 경우 (적합한 노드를 찾아 승점 평가를 한 경우)
 							break
+						if forceExhaustX:										# 루프를 깨야하는 경우 (확장검색 중 x좌표 리스트를 모두 쓴 것처럼 취급해야 할 때)
+							break
+
+						newKey = node_createNextKey(x)  # key 생성 (x 좌표만으로 구성된 sequence)
+						# (확장검색) 수를 두는 플레이어 턴일 때, 해당 키로는 검색을 이미 완료했을 경우, 다음 x좌표를 본다.
+						#if useExpansionSearch and newKey in exhaustedKey and currentP1Turn == starterIsP1:
+						#	continue	# note : 적 플레이어 차례일 때 스킵해버리면 검색에 문제가 생김
 
 						for y in range(height):									# y좌표를 올라가면서 착수점을 찾는다.
 							if node.board.canPlace(x, y):						# 둘 수 있는 곳을 찾았으면
-								newKey = node_createNextKey(x)  				# key 생성 (x 좌표만으로 구성된 sequence)
+
 								#print("check key : " + newKey)
 
 								#if newKey in self.nodeDict:
 								try:											# 같은 키를 지닌 수가 이미 있다면 가져온다.
 									cached	= nodeDict[newKey]
+									'''
 									if cached.finished:							# 승부가 이미 난 노드라면, 다시 한 번 승률 카운트를 해준다.
 										#cached.propagateWinCount(starterIsP1)
 										# TEST 2 : 승리 카운트를 하되, 다른 좌표도 한번 더 찾아본다
@@ -346,9 +367,40 @@ class MCSolver(connect4.BaseSolver):
 										pass
 									elif cached.board.boardFull():				# 혹은, 보드가 꽉찬 경우엔 다시 한 번 비김 처리
 										#cached.propagateDrawCount(starterIsP1)
-										shouldBreak = True						# 어차피 다른 수가 없으므로 (둘 수 있는 곳이 하나뿐) x좌표를 새로 찾을 필요 없음. 다음 회차로 넘어가도록 한다
+										#shouldBreak = True						# 어차피 다른 수가 없으므로 (둘 수 있는 곳이 하나뿐) x좌표를 새로 찾을 필요 없음. 다음 회차로 넘어가도록 한다
+										pass
 									else:										# 승부가 안 난 경우엔 계속 검색
 										nextNode	= cached
+									'''
+									if cached.finisherIsP1 is not None:		# 승패가 난 노드면, 다시 승리 카운트를 한다.
+										cached.propagateWinCount(starterIsP1)
+										#shouldBreak = True
+
+										#'''
+										if not useExpansionSearch or (currentP1Turn != starterIsP1):	# 확장검색이 아니거나 상대방 턴일 경우 x좌표를 새로 찾지 않고 다음 회차로
+											shouldBreak = True
+										else:								# 착수자 턴이면 x검색을 취소하고 상위 노드로 되돌아간다.
+											forceExhaustX = True
+										#'''
+
+									elif cached.board.boardFull():			# 혹은, 보드가 꽉찬 경우엔 다시 한 번 비김 처리
+										cached.propagateDrawCount(starterIsP1)
+										#shouldBreak = True
+										#'''
+										if not useExpansionSearch or (currentP1Turn != starterIsP1):	# 확장검색이 아니거나 상대방 턴일 경우 x좌표를 새로 찾지 않고 다음 회차로
+											shouldBreak = True
+										else:								# 착수자 턴이면 x검색을 취소하고 상위 노드로 되돌아간다.
+											forceExhaustX = True
+										#'''
+
+									else:
+										# 확장검색이면서 exhaustedKey인 경우가 아니거나 현재 상대방 턴일 경우, 이 노드로 계속 검색한다.
+										if (not (useExpansionSearch and (newKey in exhaustedKey))) or (currentP1Turn != starterIsP1):
+											nextNode = cached
+										# 그 외의 경우, 다음 x 좌표를 찾게 둔다.
+
+									# 이외의 경우엔 (내 턴이면서 해당 x좌표로는 검색을 끝낸 경우) 그냥 다른 x좌표를 검색한다.
+
 								#else:
 								except KeyError:								# 새로운 수일 경우, 새로 노드를 만들어야함
 									newNode					= MCSolver.Tree.Node(node)
@@ -359,17 +411,41 @@ class MCSolver(connect4.BaseSolver):
 										if newNode.board.boardFull():			# 만약 비긴 경우엔(보드꽉참) 비김 체크, 다음 회차로.
 											newNode.propagateDrawCount(starterIsP1)
 											shouldBreak		= True
+											exhaustedKey.add(newKey)			# 이 노드는 다음엔 검색하지 않아야 함
 											#print('draw!')
 										else:									# 그 외의 경우엔 (게임 안끝남) 검색 계속
 											nextNode		= newNode
 									else:										# 승부가 난 경우
 										#print ("new finish : " + newKey)
 										shouldBreak			= True				# x좌표를 새로 찾을 필요 없음. 다음 회차로 넘어가도록 한다
+										exhaustedKey.add(newKey)				# 이 노드는 다음엔 검색하지 않아야 함
 
-								break											# 수를 둔 뒤에는 위쪽 y좌표를 찾는 게 무의미함
+								break											# x,y좌표를 찾은 뒤에는 위쪽 y좌표를 찾는 게 무의미함
 
-					node			= nextNode									# 위에서 찾은 "다음 노드"를 사용
-					currentP1Turn	= not currentP1Turn							# 턴이 넘어가므로 플래그 반전
+						#exhaustedKey.add(newKey)								# 적당한 y좌표를 못찾은 경우(그 줄 꽉 찬 경우) 탐색 불가한 키로 등록
+
+
+					if useExpansionSearch and (not shouldBreak and nextNode is None):	# 확장검색 사용시, x좌표 후보중에서 적합한 노드를 전혀 찾지 못했다면,
+						if currentP1Turn == starterIsP1:						# 내 턴일 경우, 현재 노드는 exhausted 상태로 바꾼다. (다음 회차에 검색할 게 없으므로)
+							exhaustedKey.add(node.key)
+
+							if node.parent is not None:							# parent가 존재하면
+								nextNode = node.parent.parent					# parent의 parent로 돌아간다. (적 턴을 건너뛴다)
+							else:												# 아닌 경우는 다음 검색 노드를 지정하지 않는다 (root 도달)
+								nextNode = None
+							# 아군 -> 아군 턴으로 건너뛰므로 currentP1Turn 플래그 반전은 하지 않는다.
+
+						else:													# 상대방 턴일 경우,
+							nextNode = node.parent								# parent노드로 돌아간다. (내 턴이 된다.)
+							currentP1Turn = starterIsP1
+
+						# NOTE : parent가 None인 경우(root인 경우)엔 조건에 따라서 알아서 루프를 끝낸다.
+
+					else:														# 그외 일반적인 경우 (확장검색이 아니거나 적합한 노드를 찾았거나 x검색 끝내는 경우)
+						currentP1Turn = not currentP1Turn						# 다음 노드를 정했다면 턴이 넘어가는 상황이므로 플래그 반전
+
+					node			= nextNode									# 위에서 찾은 "다음 노드"를 사용 (None일 수도 있으며 이때는 iteration 1회차 끝)
+
 
 
 	def __init__(self, name, weightedSearchProb = 0.9, trycount = 10000, threadcount = 4, initialtrycount = 5000):
@@ -505,8 +581,8 @@ class MCSolver(connect4.BaseSolver):
 
 			print('extra phase (3 ~ ) start')
 
-			for phase in range(3, 20):
-				if time.time() - startTime >= 100:							# 추가 페이즈 실행중에 100초(1분 40초) 넘어가면 루프 종료
+			for phase in range(3, 30):
+				if time.time() - startTime >= 90:							# 추가 페이즈 실행중에 90초(1분 30초) 넘어가면 루프 종료
 					break
 
 				oldtsumlist = None
