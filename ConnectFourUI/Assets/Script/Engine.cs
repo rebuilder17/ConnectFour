@@ -299,4 +299,10 @@ public class Engine : MonoBehaviour
 				break;
 		}
 	}
+
+
+	private void Update()
+	{
+		System.Threading.Thread.Sleep(8);		// FIX : cpu idle 사용량 감소를 위해서 프레임마다 sleep을 걸어준다. 괜찮겠지...
+	}
 }
