@@ -256,6 +256,7 @@ class MCSolver(connect4.BaseSolver):
 			nodeDict		= self.nodeDict
 			weightedSearchProb	= self.weightedSearchProb
 			starterIsP1		= self.isP1Turn
+			forceEqualWeight= weightedSearchProb == 0
 			##############################
 
 			for trycount in range(self.trycount):						# 지정한 횟수만큼 탐색을 반복한다.
@@ -270,7 +271,7 @@ class MCSolver(connect4.BaseSolver):
 					# cacheing
 					node_createNextKey	= node.createNextKey
 
-					if starterIsP1 == currentP1Turn and random_random() >= weightedSearchProb:			# *** 일정 확률로 동일하게 랜덤으로 찾는다.
+					if forceEqualWeight or starterIsP1 == currentP1Turn and random_random() >= weightedSearchProb:			# *** 일정 확률로 동일하게 랜덤으로 찾는다.
 						random_shuffle(shuffledIdx)
 						xlist	= shuffledIdx
 					else:												# *** 나머지 확률로 weight를 따진다.
@@ -304,7 +305,8 @@ class MCSolver(connect4.BaseSolver):
 							w -= minw
 							#w = math.pow(w, 1.5)
 							#w *= w
-							xweight[x] = w ** 2
+							#xweight[x] = w ** 2
+							xweight[x] = w
 						#'''
 
 
@@ -337,14 +339,14 @@ class MCSolver(connect4.BaseSolver):
 								try:											# 같은 키를 지닌 수가 이미 있다면 가져온다.
 									cached	= nodeDict[newKey]
 									if cached.finished:							# 승부가 이미 난 노드라면, 다시 한 번 승률 카운트를 해준다.
-										cached.propagateWinCount(starterIsP1)
+										#cached.propagateWinCount(starterIsP1)
 										# TEST 2 : 승리 카운트를 하되, 다른 좌표도 한번 더 찾아본다
-										shouldBreak	= True						# x좌표를 새로 찾을 필요 없음. 다음 회차로 넘어가도록 한다
+										#shouldBreak	= True						# x좌표를 새로 찾을 필요 없음. 다음 회차로 넘어가도록 한다
 										# TEST : 승리 카운트를 하지 않고 다른 X 좌표를 찾도록 해본다
-										#pass
+										pass
 									elif cached.board.boardFull():				# 혹은, 보드가 꽉찬 경우엔 다시 한 번 비김 처리
-										cached.propagateDrawCount(starterIsP1)
-										shouldBreak = True						# x좌표를 새로 찾을 필요 없음. 다음 회차로 넘어가도록 한다
+										#cached.propagateDrawCount(starterIsP1)
+										shouldBreak = True						# 어차피 다른 수가 없으므로 (둘 수 있는 곳이 하나뿐) x좌표를 새로 찾을 필요 없음. 다음 회차로 넘어가도록 한다
 									else:										# 승부가 안 난 경우엔 계속 검색
 										nextNode	= cached
 								#else:
@@ -514,6 +516,23 @@ class MCSolver(connect4.BaseSolver):
 				#tempsumlist = self._genSummaryFromNodeListList(treelist)	# 중간 결과 수집
 				tempsumlist = self._genSummaryFromProcessNodeList(nodelist)  # 중간 결과 수집
 
+				# TEST : level-1 노드의 승률 추적
+				tmpdict = {}
+				for sum in tempsumlist:
+					key = sum['key']
+					if key // _WIDTH == 1:
+						tmpdict[key] = sum
+				tpstr = ''
+				for x in range(_WIDTH):
+					key = 1 * _WIDTH + x
+					if key in tmpdict:
+						ppair = tmpdict[key]
+						tpstr += '({0:.3f}/{1:.3f}) '.format(ppair['p1prob'], ppair['p2prob'])
+					else:
+						tpstr += '(None) '
+				print(tpstr)
+				#####################################
+
 				if oldtsumlist:												# 이전 중간결과와 비교
 					sumpairdict = {}
 					for oldsum in oldtsumlist:
@@ -543,10 +562,11 @@ class MCSolver(connect4.BaseSolver):
 						print('(평균 승률 변화 P : {})'.format(avg))
 
 						chistory.append(avg)
-
+						'''
 						if max(chistory[-2:]) < 0.001:	# 마지막 두 변화률이 일정 수치 이하면 안정화된 것으로 본다
 							print('승률 안정화된 것으로 추정, 계산 종료')
 							break
+						'''
 
 
 				'''
@@ -623,9 +643,9 @@ def _tree_process(treeOriginal, pipe, accentXList = []):
 	#origwsp = tree.weightedSearchProb
 	#tree.weightedSearchProb = 1	# 항상 wegited search 하도록
 
-	_tree_accenting(tree, accentXList, tree.trycount * 2)	# 지정한 X좌표에 충분히 포인트를 줘서 이쪽을 주로 search하도록...
+	_tree_accenting(tree, accentXList, tree.trycount * 1)	# 지정한 X좌표에 충분히 포인트를 줘서 이쪽을 주로 search하도록...
 	tree.startSearch()										# 검색 시작
-	_tree_accenting(tree, accentXList, -tree.trycount * 2)  # 포인트 다시 원상복구
+	_tree_accenting(tree, accentXList, -tree.trycount * 1)  # 포인트 다시 원상복구
 
 	# 빠른 트리 합성 사용 - 기본값으로 level-3까지의 자식 노드만 정보를 보낸다
 	# childs = _tree_lv1nodelist(tree)
