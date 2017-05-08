@@ -101,11 +101,13 @@ class RuleSolver(connect4.BaseSolver):
 
     ## Rule 8은 상대의 수 위로 두는 경우입니다. 위 모든 경우가 아닌 경우 해당되지만, 둘 수 없는 경우엔 랜덤으로 두어야 합니다.
     def Rule_8(self, x, y, judge):
-        move = judge.getLastMove()
-        x_foe = move.x
-        y_foe = move.y
-
-        return 8 if (x == x_foe and y == (y_foe+1)) else 9
+        if judge.getTurn() != 0:
+            move = judge.getLastMove()
+            x_foe = move.x
+            y_foe = move.y
+            return 8 if (x == x_foe and y == (y_foe+1)) else 9
+        else:
+            return 9
 
     def getRuleNum(self, x, y, judge):
 
@@ -169,11 +171,14 @@ class RuleSolver(connect4.BaseSolver):
         next_move_chosen  = candidates.index(min(candidates))
 
         if min(candidates) == 1:
-            return 3, possiblePlaceOn[3], 'Rule 1 applied'
+            return 3, possiblePlaceOn[3], 'Rule 1 적용'
         elif min(candidates) == 10:
-            return 0, 0, 'Nowhere to Place; End of game'
+            if judge.getTurn() == 0:
+                return 3, 0, 'Rule 1 적용'
+            else:
+                return 0, 0, 'Nowhere to Place; End of game'
 
-        message = 'Rule' + str(min(candidates)) +'적용'
+        message = 'Rule ' + str(min(candidates)) +' 적용'
 
         return next_move_chosen, possiblePlaceOn[next_move_chosen], message
 
