@@ -1,4 +1,46 @@
-﻿Solver를 구현할 때 알아야 할 주요 클래스는 Judge.Interface와 Judge.Move가 있습니다.
+﻿** 요구 사항 **
+
+Python 3.6 환경에서 구동 가능합니다. Windows 64bit 환경에서 개발하고 테스트하였으며, 32bit python 인터프리터에서도 동작은 가능할 것으로 예상하나 정상 작동을 보장하지는 않습니다.
+
+Intel 2~3세대 이상, 최소 4개의 물리 코어를 탑재한 프로세서를 장착한 PC에서 구동할 것을 권장합니다. Laptop에서도 구동 가능하나 Full performance를 낼 수 있도록 전원 공급을 해줘야 합니다.
+
+RAM 여유공간은 적어도 2~3GB 정도 확보한 상태에서 구동하기를 권장합니다.
+
+
+
+
+** 실행 방법에 관해서 **
+
+CUI 버전은 main_cui.py 를 실행하면 됩니다. main.py는 GUI와 통신을 위한 코드이므로 실행은 가능해도 정상적인 CUI로 동작하지는 않습니다.
+
+GUI는 별도로 포함한 패키지를 참고해주세요.
+
+
+
+
+** GUI와 연동 방법 **
+
+GUI와 컴파일한 Python 코드끼리 IPC를 통해 통신하는 구조이므로, 이를 위해서는 GUI의 특정 경로에 실행 파일을 복사해넣어야만 합니다.
+
+GUI의 내부 데이터 폴더 중 StreamingAssets 폴더에 cx_Freeze로 컴파일한 코드를 복사하면 됩니다.
+(이미 GUI 패키지에 미리 컴파일된 python 코드가 포함되어있으므로, 단순히 실행해보는 것이 목적이라면 굳이 새로 컴파일할 필요는 없습니다.)
+
+cx_Freeze는 Python 내부의 pip 스크립트를 통해 다운로드, 설치할 수 있습니다.
+
+cx_Freeze 설치 후 Python36 인터프리터의 파라미터로 "setup.py build" 커맨드를 입력하여 실행하면 실행파일 패키지를 컴파일합니다.
+
+GUI가 Windows 64bit 환경을 타겟으로 컴파일되었으므로 cx_Freeze 역시 해당 환경에서 실행하여 컴파일해야 합니다.
+
+
+
+
+
+
+
+
+** Solver 구현에 관해서 **
+
+Solver를 구현할 때 알아야 할 주요 클래스는 Judge.Interface와 Judge.Move가 있습니다.
 
 
 * Judge.Interface 멤버
