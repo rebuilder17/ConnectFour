@@ -160,7 +160,7 @@ class MCSolver(connect4.BaseSolver):
 				#add = 1
 				#'''
 				while node:
-					#node.p1count += 1
+					node.p1count += 1
 					# NOTE : 무승부 상황은 플레이어2에게 유리한 것으로 판단한다.
 					node.p2count += 1
 					# add += 1  # 먼 노드일 수록 결정에 더 영향을 미치도록
@@ -266,13 +266,29 @@ class MCSolver(connect4.BaseSolver):
 				node			= self.root
 				currentP1Turn	= starterIsP1
 				searchLimit		= 0
+				limitTestLog	= None
 
-				useExpansionSearch = random_random() < 0.4  # 일정 확률로 이미 탐색한 노드를 피해서 검색하는 방법을 쓴다.
+				useExpansionSearch = random_random() < 0.3				# 일정 확률로 이미 탐색한 노드를 피해서 검색하는 방법을 쓴다.
 
 				while node:												# 다음에 검색할 노드가 없을 때까지 반복
 					if searchLimit > 100:
-						#print('node search limit reached!')
+						print('node search limit reached!')
 						break
+					'''
+					if searchLimit == 1000:
+						limitTestLog = "search limit path check\n"
+					if limitTestLog is not None:
+						xpath = []
+						tmpkey = node.key
+						while tmpkey > 1:
+							xpath.append(tmpkey % _WIDTH)
+							tmpkey = tmpkey // _WIDTH
+						xpath.reverse()
+						limitTestLog += "{} ".format(xpath)
+					if searchLimit > 1100:
+						print(limitTestLog)
+						break
+					'''
 					searchLimit += 1
 
 					nextNode	= None
@@ -431,6 +447,9 @@ class MCSolver(connect4.BaseSolver):
 
 							if node.parent is not None:							# parent가 존재하면
 								nextNode = node.parent.parent					# parent의 parent로 돌아간다. (적 턴을 건너뛴다)
+
+								# FIX : 더이상 탐색 못하는 node에 도달했을 때 parent.parent로 되돌아가서도 같은 선택을 하지 못하도록, 부모 노드도 exhausted 표시를 한다.
+								exhaustedKey.add(node.parent.key)
 							else:												# 아닌 경우는 다음 검색 노드를 지정하지 않는다 (root 도달)
 								nextNode = None
 							# 아군 -> 아군 턴으로 건너뛰므로 currentP1Turn 플래그 반전은 하지 않는다.
