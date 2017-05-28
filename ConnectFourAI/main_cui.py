@@ -13,12 +13,12 @@ if __name__ == '__main__':
 
 	# player1
 	judge.addPlayer1Solver(connect4.HumanSolver('P1 HumanSolver'))
-	judge.addPlayer1Solver(MCSolver('P1 MCSolver v5', 0.95, 10000, threadcount=8, initialtrycount=5000))
+	judge.addPlayer1Solver(MCSolver('P1 MCSolver v5', 0.98, 10000, threadcount=8, initialtrycount=5000))
 	judge.addPlayer1Solver(RuleSolver('P1 RuleSolver'))
 
 	# player2
 	judge.addPlayer2Solver(connect4.HumanSolver('P2 HumanSolver'))
-	judge.addPlayer2Solver(MCSolver('P2 MCSolver v5', 0.95, 10000, threadcount=8, initialtrycount=5000))
+	judge.addPlayer2Solver(MCSolver('P2 MCSolver v5', 0.98, 10000, threadcount=8, initialtrycount=5000))
 	judge.addPlayer2Solver(RuleSolver('P2 RuleSolver'))
 
 	# output
